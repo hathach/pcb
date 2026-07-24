@@ -347,6 +347,10 @@
       {
         "netclass": "Power",
         "pattern": "HOST_5V_IN"
+      },
+      {
+        "netclass": "Power",
+        "pattern": "J9_VBUS"
       }
     ]
   },

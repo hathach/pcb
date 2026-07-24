@@ -169,7 +169,10 @@ for _ref in ("Rt1", "Rt2", "Rt3", "Rt4", "Rt5"):
     _add(Part(_ref, "27", "r0402", _pins("1", "2")))
 
 # --- Reset debounce cap (100n, DNP per DESIGN "Reset") ----------------------
-_add(Part("C_NRESET", "100n", "c0402", _pins("1", "2"), dnp=True))
+# Value carries its voltage rating (Task 14b, Adafruit schematic rule: every
+# capacitor value states a voltage rating) -- resistor values are untouched,
+# _parse_ohms depends on those staying bare numeric+suffix.
+_add(Part("C_NRESET", "100n/16V", "c0402", _pins("1", "2"), dnp=True))
 
 # --- USB D+/D- series resistors (22R) --------------------------------------
 _add(Part("R_HDP", "22", "r0402", _pins("1", "2")))   # host D+ series (GP20 -> HOST_DP)
@@ -183,6 +186,13 @@ _add(Part("R_HDM_PD", "15k", "r0402", _pins("1", "2")))   # HOST_DM -> GND
 
 # --- Device D+ pull-up (1.5k), firmware soft-connect via GP11 --------------
 _add(Part("R_DPU", "1.5k", "r0402", _pins("1", "2")))
+
+# --- Host-VBUS-EN pulldown (100k) -- Task 14b -------------------------------
+# Defines the TPS2051B (U_HSW) EN pin state at boot: RP2350-E9 makes the
+# chip's internal GPIO pull-downs unreliable before firmware configures the
+# pin, so a real external pulldown is needed to guarantee EN (GP17) defaults
+# low (load switch OFF) rather than floating, until firmware drives it high.
+_add(Part("R_HVEN_PD", "100k", "r0402", _pins("1", "2")))
 
 # --- VBUS-detect dividers (8.2k/8.2k each) ----------------------------------
 _add(Part("R_NVD_T", "8.2k", "r0402", _pins("1", "2")))   # native VBUS-detect divider, top leg (thru JP4)
@@ -199,19 +209,28 @@ _add(Part("R_LED_USER", "1k", "r0402", _pins("1", "2")))
 _add(Part("R_LED_PWR", "1k", "r0402", _pins("1", "2")))
 
 # --- Host-VBUS bulk/decoupling caps (Task 4; DESIGN SS8.1: 10-22uF bulk +
-# 0.1uF at the connector) --------------------------------------------------
-_add(Part("C_HVBUS_BULK", "22u", "c0805", _pins("1", "2")))
-_add(Part("C_HVBUS_100n", "100n", "c0402", _pins("1", "2")))
+# 0.1uF at the connector) -- values carry voltage ratings (Task 14b, Adafruit
+# schematic rule: every capacitor value states a voltage rating) -----------
+_add(Part("C_HVBUS_BULK", "22u/10V", "c0805", _pins("1", "2")))
+_add(Part("C_HVBUS_100n", "100n/16V", "c0402", _pins("1", "2")))
 
 # --- Probe points --------------------------------------------------------
 _add(Part("TP1", "TP", "testpoint", _pins("1")))
 _add(Part("TP2", "TP", "testpoint", _pins("1")))
 _add(Part("TP3", "TP", "testpoint", _pins("1")))
 
-# --- DNP parts (DESIGN SS14 / brief G-7) ------------------------------------
-# U_INA219_ALT: INA219 is SOT23-8, not in FP; borrows the isense (SOT-23-5)
-# footprint as an accepted stand-in since the part is never populated.
-_add(Part("U_INA219_ALT", "INA219", "isense", _numbered(5), dnp=True))
+# --- DNP parts (DESIGN SS14 / brief G-7; Task 14b realizes these Adafruit-
+# style: real footprint + fully wired + dnp=True, replacing the earlier
+# "footprint stand-in, all pins nc" placeholders) ---------------------------
+# U_INA219_ALT: INA219, SOT-23-8 (TI DCN package), per TI SBOS448 Figure 8-1
+# ("DCN Package 8-Pin SOT-23, Top View"): pad1=IN+, pad2=IN-, pad3=GND,
+# pad4=VS, pad5=SCL, pad6=SDA, pad7=A0, pad8=A1.
+_add(Part(
+    "U_INA219_ALT", "INA219", "sot23-8",
+    _pins("IN+", "IN-", "GND", "VS", "SCL", "SDA", "A0", "A1"),
+    padmap={"IN+": "1", "IN-": "2", "GND": "3", "VS": "4", "SCL": "5", "SDA": "6", "A0": "7", "A1": "8"},
+    dnp=True,
+))
 # D_J9_BUSPWR: optional J9-VBUS -> VBUS_NET bus-power diode (DESIGN SS8.2/SS14).
 _add(Part("D_J9_BUSPWR", "1N4148W", "sod123", _pins("1", "2"), dnp=True))
 # J_TRACE_TP: optional 1x6 100-mil test header on the five trace nets + GND.
@@ -423,10 +442,8 @@ PARTS["PICO"].pins["21"] = "NATIVE_VBUS_DET"
 # the board rail, never backfeed the host connector. Never populated (dnp),
 # so it can't bridge the two nets in the graph helpers.
 PARTS["D_J9_BUSPWR"].pins.update({"1": "J9_VBUS", "2": "VBUS_NET"})
-# U_INA219_ALT: paper-only INA219-over-I2C alternative to U_ISNS (DESIGN
-# SS10/SS14) -- never populated, so all pins are marked no-connect rather
-# than wired to any net.
-PARTS["U_INA219_ALT"].nc |= {"1", "2", "3", "4", "5"}
+# U_INA219_ALT wiring: see Task 14b section below (module footer) -- it now
+# gets real net assignments instead of an all-nc placeholder.
 
 
 # --------------------------------------------------------------------------
@@ -504,11 +521,37 @@ PARTS["J9"].nc |= {"4"}
 # (nothing in DESIGN marks this header's pins as intentionally unused).
 # Wired here following the same precedent as D_J9_BUSPWR: an optional DNP
 # part still gets real net assignments to document what it's for; the `dnp`
-# flag alone (not nc) is what keeps it out of the bridging helpers and out of
-# emit_netlist's output. Pin order is arbitrary (generic header, no datasheet
-# constraint): trace bus order, GND last.
+# flag alone (not nc) is what keeps it out of the bridging helpers (dnp parts
+# never bridge two nets, see `_resistor_pair`) -- as of Task 14b, `dnp` no
+# longer excludes a part from `emit_netlist`'s output (see that function).
+# Pin order is arbitrary (generic header, no datasheet constraint): trace bus
+# order, GND last.
 PARTS["J_TRACE_TP"].pins.update({
     "1": "TRACECLK", "2": "TD0", "3": "TD1", "4": "TD2", "5": "TD3", "6": "GND",
+})
+
+
+# --------------------------------------------------------------------------
+# Task 14b: model pass -- Adafruit-style DNP realization (footprint present +
+# wired + dnp=True, replacing the earlier "stand-in footprint, all pins nc"
+# placeholders), HOST_VBUS_EN pulldown, capacitor voltage ratings. See
+# hw/build_board.py for the matching board-side DNP-attribute + netclass
+# work (J9_VBUS added to the Power pattern list).
+# --------------------------------------------------------------------------
+
+# --- Host-VBUS-EN pulldown wiring (see PARTS declaration above for the
+# rationale): HOST_VBUS_EN -> GND.
+PARTS["R_HVEN_PD"].pins.update({"1": "HOST_VBUS_EN", "2": "GND"})
+
+# --- U_INA219_ALT wiring (Adafruit-style DNP realization -- see PARTS
+# declaration above for the SOT-23-8 padmap/datasheet source): parallels
+# U_ISNS across the same shunt (IN+/IN- on R_SHUNT's own VBUS_SEL/
+# HOST_5V_IN nets), GND/VS on the board rails, SDA/SCL on the existing I2C0
+# bus; A0/A1 both grounded -> I2C address 0x40 (TI SBOS448 Table 2, "Serial
+# Bus Address" -- both address pins low).
+PARTS["U_INA219_ALT"].pins.update({
+    "IN+": "VBUS_SEL", "IN-": "HOST_5V_IN", "GND": "GND", "VS": "P3V3",
+    "SDA": "I2C0_SDA", "SCL": "I2C0_SCL", "A0": "GND", "A1": "GND",
 })
 
 
@@ -730,33 +773,38 @@ PINMAP = _PinMapView()
 def emit_netlist(path: str) -> None:
     """Write a KiCad E-format s-expression netlist derived from PARTS/NETS.
 
-    DNP parts are excluded entirely: no `(comp ...)` entry, and no `(node
-    ...)` on any net -- they're never populated on the board, so they don't
-    electrically exist this rev (their refs stay reserved in PARTS). Pin
-    numbers are footprint pad numbers: each logical pin name is translated
-    through the part's padmap (identity if the part has none).
+    Task 14b (Adafruit-style DNP realization): DNP parts are now INCLUDED,
+    same as any other part -- a `(comp ...)` entry (with a nested `(property
+    (name "dnp") (value "yes"))`, mirroring how `kicad-cli sch export
+    netlist` marks a schematic symbol's `(dnp yes)` instance attribute) and
+    their pins' `(node ...)` entries on every net they touch. This matches
+    `hw/gen_sch.py`, which now places DNP parts as real symbol instances
+    (footprint present + wired + flagged `(dnp yes)`) instead of omitting
+    them -- so the reference netlist this function writes and the schematic-
+    exported netlist stay comparable pad-for-pad (`--compare-netlists`).
+    Pin numbers are footprint pad numbers: each logical pin name is
+    translated through the part's padmap (identity if the part has none).
     """
-    populated = {ref: p for ref, p in PARTS.items() if not p.dnp}
-
     lines = ['(export (version "E")']
 
     lines.append("  (components")
-    for ref in sorted(populated):
-        p = populated[ref]
+    for ref in sorted(PARTS):
+        p = PARTS[ref]
         lib, fp = FP[p.fp_class]
-        lines.append(f'    (comp (ref {ref}) (value "{p.value}") (footprint {lib}:{fp}))')
+        if p.dnp:
+            lines.append(f'    (comp (ref {ref}) (value "{p.value}") (footprint {lib}:{fp})')
+            lines.append('      (property (name "dnp") (value "yes"))')
+            lines.append("    )")
+        else:
+            lines.append(f'    (comp (ref {ref}) (value "{p.value}") (footprint {lib}:{fp}))')
     lines.append("  )")
 
     lines.append("  (nets")
     code = 0
     for name in sorted(NETS):
-        nodes = sorted(
-            (ref, populated[ref].pad_number(pad))
-            for ref, pad in NETS[name]
-            if ref in populated
-        )
+        nodes = sorted((ref, PARTS[ref].pad_number(pad)) for ref, pad in NETS[name])
         if not nodes:
-            continue  # net touches only DNP parts -- nothing to emit
+            continue  # shouldn't happen -- every net has >=1 member by construction
         code += 1
         lines.append(f'    (net (code {code}) (name "{name}")')
         for ref, pad_no in nodes:

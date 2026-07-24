@@ -2,9 +2,12 @@
 
 Run: python3 hw/build_board.py
 
-Idempotent: a non-DNP PARTS ref already present on the board is reused
-(skip-if-present) rather than reloaded, so re-running does not duplicate
-footprints; see `_add_footprints` for why (KiCad 9.0.2 pcbnew quirk).
+Idempotent: a PARTS ref already present on the board is reused (skip-if-
+present) rather than reloaded, so re-running does not duplicate footprints;
+see `_add_footprints` for why (KiCad 9.0.2 pcbnew quirk). Since Task 14b,
+DNP parts are placed too (Adafruit-style realization: footprint present,
+wired, and flagged with the KiCad 9 footprint DNP attribute) -- they land at
+FootprintLoad's own (0, 0) default; Task 14c places them for real.
 """
 
 import math
@@ -54,7 +57,8 @@ def _fp_dir(lib: str) -> str:
 
 
 def _add_footprints(b) -> dict[str, "pcbnew.FOOTPRINT"]:
-    """Load + add every non-DNP PARTS entry; return ref -> FOOTPRINT.
+    """Load + add every PARTS entry (DNP included, Task 14b); return
+    ref -> FOOTPRINT.
 
     Idempotence: skip-if-present -- if a footprint with this ref is already
     on the board, reuse it instead of loading a duplicate. (Tried
@@ -67,11 +71,20 @@ def _add_footprints(b) -> dict[str, "pcbnew.FOOTPRINT"]:
     object is not iterable`, then the process segfaults on exit. Skip-if-
     present sidesteps it entirely: a second run makes zero FootprintLoad
     calls and never touches BOARD.Remove.)
+
+    DNP parts (Adafruit-style realization: footprint present + wired +
+    dnp=True) get the KiCad 9 footprint DNP attribute plus exclude-from-pos-
+    files -- still shown in the BOM (flagged DNP), but never handed to a
+    pick-and-place machine. `pcbnew.FP_DNP`/`FP_EXCLUDE_FROM_POS_FILES`
+    verified present on this system's KiCad 9.0.2 pcbnew
+    (`[a for a in dir(pcbnew) if 'DNP' in a]`); the real on-disk `(attr ...)`
+    serialization was cross-checked too (`(attr smd dnp)`, DNP folded into
+    the same token list as `smd`/`through_hole`, not a separate field). They
+    are never explicitly positioned, so they land at FootprintLoad's own
+    (0, 0) default -- Task 14c places them for real.
     """
     fps: dict[str, "pcbnew.FOOTPRINT"] = {}
     for ref, part in PARTS.items():
-        if part.dnp:
-            continue
         fp = b.FindFootprintByReference(ref)
         if fp is None:
             lib, name = FP[part.fp_class]
@@ -80,6 +93,8 @@ def _add_footprints(b) -> dict[str, "pcbnew.FOOTPRINT"]:
             b.Add(fp)
         fp.SetReference(ref)
         fp.SetValue(part.value)
+        if part.dnp:
+            fp.SetAttributes(fp.GetAttributes() | pcbnew.FP_DNP | pcbnew.FP_EXCLUDE_FROM_POS_FILES)
         fps[ref] = fp
     return fps
 
@@ -108,10 +123,9 @@ def _wire_pads(fps: dict, nets: dict) -> None:
     Part.pad_nets() (same rule emit_netlist uses). A footprint pad number can
     appear on more than one physical pad (USB shield tabs, mounting flanges
     on a connector footprint) -- every matching pad gets the net, not just
-    the first."""
+    the first. DNP parts are wired too (Task 14b) -- their pads carry real
+    net assignments like any other part, they're just never populated."""
     for ref, part in PARTS.items():
-        if part.dnp:
-            continue
         fp = fps[ref]
         for padno, netname in part.pad_nets():
             ni = nets[netname]
@@ -135,7 +149,11 @@ def _set_net_classes(b) -> None:
 
     nc("Power", 0.5, 0.2)
     nc("Trace", 0.3, 0.25)
-    for n in ["GND", "VBUS_NET", "V5_JTRACE", "VSYS", "P3V3", "HOST_VBUS"]:
+    # J9_VBUS added Task 14b: same 5V-rail-adjacent USB VBUS class as
+    # HOST_VBUS/VBUS_NET (Task 14's report flagged this net as missing from
+    # the pattern list). SetNetclassPatternAssignment is additive -- it
+    # doesn't clear route_trace.py's later VBUS_SEL/HOST_5V_IN assignments.
+    for n in ["GND", "VBUS_NET", "V5_JTRACE", "VSYS", "P3V3", "HOST_VBUS", "J9_VBUS"]:
         ns.SetNetclassPatternAssignment(n, "Power")
     for n in ["TRACECLK", "TD0", "TD1", "TD2", "TD3"]:
         ns.SetNetclassPatternAssignment(n, "Trace")

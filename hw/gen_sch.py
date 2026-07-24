@@ -13,8 +13,10 @@ every non-custom part uses a small generic lib symbol (one per pin-count) that
 reference netlist -- by construction, not by hoping a stock symbol matches.
 
 Layout: a plain grid ("shelf packing"), left-to-right/wrap, one symbol per
-PARTS ref (DNP parts are skipped entirely, mirroring `emit_netlist`). Every
-non-DNP pin gets a short wire stub ending in a `global_label` carrying the
+PARTS ref -- including DNP parts (Task 14b, Adafruit-style realization:
+footprint present, wired, and flagged via the KiCad 9 `(dnp yes)` symbol
+instance attribute, instead of being omitted like `emit_netlist` used to).
+Every pin gets a short wire stub ending in a `global_label` carrying the
 *exact* net name (or a `no_connect` marker for pins in `part.nc`). Global
 labels of the same text merge into one net across the whole (flat) sheet, so
 no routing between parts is needed for netlist correctness -- see DESIGN
@@ -159,9 +161,12 @@ CUSTOM_YSPAN = {name: (max(p["y"] for p in pins.values()) - min(p["y"] for p in 
 # Generic per-pin-count symbols
 # --------------------------------------------------------------------------
 
-GENERIC_COUNTS = sorted({len(p.pins) for p in PARTS.values() if not p.dnp} - {40, 20, 10} | {20})
+GENERIC_COUNTS = sorted({len(p.pins) for p in PARTS.values()} - {40, 20, 10} | {20})
 # 20 is shared: J1B/J2B (generic) AND J3 (custom, also 20 pins) -- keep a
 # generic 20-pin symbol available for J1B/J2B regardless of J3's custom one.
+# Task 14b: DNP parts' pin counts are included too (U_INA219_ALT's 8-pin
+# SOT-23-8 is the new one -- the other two DNP parts' counts, 2 and 6, were
+# already covered by non-DNP parts of the same size).
 
 
 def generic_lib_id(n: int) -> str:
@@ -398,8 +403,8 @@ def pack(refs: list[str]) -> dict[str, tuple[float, float]]:
 # --------------------------------------------------------------------------
 
 def main() -> None:
-    non_dnp = sorted(ref for ref, p in PARTS.items() if not p.dnp)
-    origins, _max_x, max_y = pack(non_dnp)
+    refs = sorted(PARTS)
+    origins, _max_x, max_y = pack(refs)
 
     # Power-flag pseudo-parts get their own trailing shelf row (all offsets
     # kept as multiples of GRID, same reasoning as pack()).
@@ -442,7 +447,7 @@ def main() -> None:
 
     ref_y_top = {}  # for Reference/Value property placement offsets
 
-    for ref in non_dnp:
+    for ref in refs:
         p = PARTS[ref]
         n = len(p.pins)
         kind = part_kind(ref, p.fp_class)
@@ -458,7 +463,7 @@ def main() -> None:
         sx.line("(exclude_from_sim no)")
         sx.line("(in_bom yes)")
         sx.line("(on_board yes)")
-        sx.line("(dnp no)")
+        sx.line(f"(dnp {'yes' if p.dnp else 'no'})")
         sym_uuid = u()
         sx.line(f'(uuid "{sym_uuid}")')
         if kind is not None:
@@ -521,7 +526,7 @@ def main() -> None:
                 wires_labels_ncs.close()
                 continue
             if net is None:
-                continue  # shouldn't happen for non-DNP parts (test_lint invariant)
+                continue  # shouldn't happen for any part (test_lint invariant)
 
             wires_labels_ncs.open("(wire")
             wires_labels_ncs.open("(pts")
@@ -618,7 +623,7 @@ def main() -> None:
 
     with open(OUT_PATH, "w") as f:
         f.write(sx.text())
-    print(f"wrote {OUT_PATH}: {len(non_dnp)} parts, {flag_n} power flags")
+    print(f"wrote {OUT_PATH}: {len(refs)} parts, {flag_n} power flags")
 
     write_gen_symbol_lib()
     ensure_gen_lib_table_entry()
