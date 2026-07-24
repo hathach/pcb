@@ -9,4 +9,8 @@ fp-info-cache
 _autosave-*
 # Fabrication outputs
 gerbers/
+fab/
 *.zip
+.superpowers/
+# Python venv (SKiDL spike / tooling)
+.venv/

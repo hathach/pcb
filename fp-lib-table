@@ -1,0 +1,3 @@
+(fp_lib_table
+  (lib (name "pico2_trace")(type "KiCad")(uri "${KIPRJMOD}/pico2_trace.pretty")(options "")(descr ""))
+)
