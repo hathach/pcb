@@ -56,3 +56,31 @@ def test_usb_nets():
     assert series_between("DEV_DP","DEV_DP_PU_EN","R_DPU")
     gp11_pad = next(pad for pad, gpio in _PICO_GPIO_PAD.items() if gpio == 11)
     assert ("PICO", gp11_pad) in net_pins("DEV_DP_PU_EN")
+
+
+def test_pinmap():
+    from hw.netlist import PINMAP
+    expect = {0:"GUARD",1:"TRACECLK",2:"TD0",3:"TD1",4:"TD2",5:"TD3",6:"GUARD",
+              8:"I2C0_SDA",9:"I2C0_SCL",10:"LED_USER",12:"UART0_TX",13:"UART0_RX",
+              14:"BTN_USER",15:"HOST_VBUS_FLT",16:"NATIVE_VBUS_DET",17:"HOST_VBUS_EN",
+              18:"DEV_DP",19:"DEV_DM",20:"HOST_DP",21:"HOST_DM",26:"ISENSE",27:"DEV_VBUS_DET"}
+    for gp,fn in expect.items():
+        assert PINMAP[gp]==fn, f"GP{gp}: {PINMAP.get(gp)} != {fn}"
+
+
+def test_breakout():
+    # NOTE (controller ruling, corrects the brief): the brief's snippet
+    # (`J1B.pins.get(n) or J2B.pins.get(n)` over "1".."40") can't work -- J1B
+    # and J2B pads are each only keyed "1".."20" (breakout pad convention:
+    # J1B pad n <-> PICO physical pin n for n in 1..20; J2B pad n <-> PICO
+    # physical pin n+20, i.e. pad = physical - 20 for pins 21-40). Rewritten
+    # to encode that convention directly instead of a lookup that always
+    # misses for pins 21-40.
+    from hw.netlist import PARTS
+    pico = PARTS["PICO"].pins
+    for n in range(1, 21):
+        assert PARTS["J1B"].pins[str(n)] == pico[str(n)] is not None, \
+            f"breakout J1B pad {n} not tied to PICO pin {n}"
+    for n in range(21, 41):
+        assert PARTS["J2B"].pins[str(n - 20)] == pico[str(n)] is not None, \
+            f"breakout J2B pad {n - 20} not tied to PICO pin {n}"

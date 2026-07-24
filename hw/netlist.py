@@ -104,6 +104,9 @@ _add(Part("J9", "USB-MICROB DEV", "usb_microb", _numbered(6)))
 # --- Peripherals -----------------------------------------------------------
 _add(Part("J_UART", "UART0", "hdr_1x03", _pins("1", "2", "3")))          # TX/RX/GND
 _add(Part("J_STEMMA", "STEMMA-QT", "jst_sh4", _pins("1", "2", "3", "4")))  # GND/3V3/SDA/SCL (Adafruit order)
+# SW_USER (Task 7): Task 3 only created SW1 (RESET) -- no user-button part
+# existed yet, so it's added here per DESIGN SS10 (1 user button, GP14->GND).
+_add(Part("SW_USER", "USER", "button", _pins("1", "2")))
 
 # --- Jumpers -----------------------------------------------------------
 _add(Part("JP1", "5V SEL", "hdr_1x03", _pins("1", "2", "3")))
@@ -295,10 +298,13 @@ PARTS["J3"].pins.update({"12": "TRACECLK", "14": "TD0", "16": "TD1", "18": "TD2"
 # Guard pins (DESIGN SS5.4/SS6): GP0 (pin 1) / GP6 (pin 9) each get a 2-pin
 # jumper straight to GND (default fitted). GPn *is* the function node here
 # (no series element to a differently-named net), per the guard-net case in
-# the module docstring.
-PARTS["PICO"].pins.update({"1": "GP0", "9": "GP6"})
-PARTS["JP2"].pins.update({"1": "GP0", "2": "GND"})
-PARTS["JP3"].pins.update({"1": "GP6", "2": "GND"})
+# the module docstring -- so the net itself must be named with the function
+# ("GUARD"), not the bare "GPn" the source-series case uses. (Task 7 fix:
+# these were originally named "GP0"/"GP6", which left PINMAP reporting the
+# raw GPIO name instead of "GUARD" -- caught by test_pinmap.)
+PARTS["PICO"].pins.update({"1": "GUARD", "9": "GUARD"})
+PARTS["JP2"].pins.update({"1": "GUARD", "2": "GND"})
+PARTS["JP3"].pins.update({"1": "GUARD", "2": "GND"})
 
 
 # --------------------------------------------------------------------------
@@ -398,6 +404,58 @@ PARTS["D_J9_BUSPWR"].pins.update({"1": "J9_VBUS", "2": "VBUS_NET"})
 # SS10/SS14) -- never populated, so all pins are marked no-connect rather
 # than wired to any net.
 PARTS["U_INA219_ALT"].nc |= {"1", "2", "3", "4", "5"}
+
+
+# --------------------------------------------------------------------------
+# Task 7: peripherals, spares, breakout ties, pin-map lock
+# --------------------------------------------------------------------------
+
+# --- UART0 console (DESIGN SS10/SS6): GP12/GP13 -> J_UART (GND done Task 4).
+# Direct function nodes (no series element), like the guard/I2C/button cases.
+PARTS["PICO"].pins.update({"16": "UART0_TX", "17": "UART0_RX"})
+PARTS["J_UART"].pins.update({"1": "UART0_TX", "2": "UART0_RX"})
+
+# --- STEMMA-QT / Qwiic I2C0 (DESIGN SS10): GP8/GP9 -> J_STEMMA; pad2=P3V3
+# deferred from Task 4 (GND already done there).
+PARTS["PICO"].pins.update({"11": "I2C0_SDA", "12": "I2C0_SCL"})
+PARTS["J_STEMMA"].pins.update({"2": "P3V3", "3": "I2C0_SDA", "4": "I2C0_SCL"})
+
+# --- User LED (DESIGN SS10): GP10 -> R_LED_USER (series, Task 3 part) ->
+# LED_USER anode -> cathode -> GND. Source-series convention: PICO keeps the
+# bare "GP10" net, the resistor's far side carries the function name so
+# PINMAP hops through it -- mirrors Rt1-5/R_HDP/R_HDM. LED pad numbering
+# follows the KiCad "LED" symbol default (pad1=K/cathode, pad2=A/anode),
+# same as LED_PWR (Task 4). Unlike LED_PWR's "LED_PWR_A" (no GPIO hops
+# through it, so the suffix is just documentation), LED_USER's anode net is
+# named exactly "LED_USER" (no suffix) because that's the literal string
+# _hop_label must return for PINMAP[10] to read "LED_USER".
+PARTS["PICO"].pins["14"] = "GP10"
+PARTS["R_LED_USER"].pins.update({"1": "GP10", "2": "LED_USER"})
+PARTS["LED_USER"].pins.update({"1": "GND", "2": "LED_USER"})
+
+# --- User button (DESIGN SS10): GP14 -> SW_USER -> GND. Direct function
+# node (no series element), like SW1/RESET.
+PARTS["PICO"].pins["19"] = "BTN_USER"
+PARTS["SW_USER"].pins.update({"1": "BTN_USER", "2": "GND"})
+
+# --- Spare / breakout-only pins (DESIGN SS6): GP7/GP22/GP28 exist only on
+# PICO + the breakout pads -- no other component touches them, so each just
+# gets its own bare "GPn" net (the breakout tie loop below mirrors it out).
+PARTS["PICO"].pins.update({"10": "GP7", "29": "GP22", "34": "GP28"})
+
+# --- Breakout ties (fixes G-1): every one of PICO's 40 pads must now be
+# non-None (asserted by test_pinmap/test_breakout indirectly); tie J1B/J2B
+# pin-for-pin per the corrected pad convention (task-7 controller ruling,
+# corrects the brief's test): J1B pads "1".."20" <-> PICO physical pins
+# 1-20; J2B pads "1".."20" <-> PICO physical pins 21-40 (pad = physical -
+# 20). Implemented as a loop over PARTS["PICO"].pins so it can't drift from
+# whatever the model actually wired.
+for _pico_pad, _net in PARTS["PICO"].pins.items():
+    _n = int(_pico_pad)
+    if _n <= 20:
+        PARTS["J1B"].pins[str(_n)] = _net
+    else:
+        PARTS["J2B"].pins[str(_n - 20)] = _net
 
 
 # --------------------------------------------------------------------------
