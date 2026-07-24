@@ -142,14 +142,6 @@ _add(Part(
 ))
 _add(Part("R_SHUNT", "0.1", "shunt", _pins("1", "2")))
 
-# --- Device D+ pull-up gate FET ---------------------------------------------
-# SOT-23, KiCad Q_NMOS_GSD pad convention: 1=G, 2=S, 3=D.
-_add(Part(
-    "Q_DPU", "2N7002", "fet3",
-    _pins("G", "S", "D"),
-    padmap={"G": "1", "S": "2", "D": "3"},
-))
-
 # --- Trace source-series resistors (27R, at the Pico socket pins) ----------
 for _ref in ("Rt1", "Rt2", "Rt3", "Rt4", "Rt5"):
     _add(Part(_ref, "27", "r0402", _pins("1", "2")))
@@ -167,7 +159,7 @@ _add(Part("R_DDM", "22", "r0402", _pins("1", "2")))   # device D- series (GP19 -
 _add(Part("R_HDP_PD", "15k", "r0402", _pins("1", "2")))   # HOST_DP -> GND
 _add(Part("R_HDM_PD", "15k", "r0402", _pins("1", "2")))   # HOST_DM -> GND
 
-# --- Device D+ pull-up (1.5k), gated by Q_DPU ------------------------------
+# --- Device D+ pull-up (1.5k), firmware soft-connect via GP11 --------------
 _add(Part("R_DPU", "1.5k", "r0402", _pins("1", "2")))
 
 # --- VBUS-detect dividers (8.2k/8.2k each) ----------------------------------
@@ -373,14 +365,19 @@ PARTS["R_J9VD_T"].pins.update({"1": "J9_VBUS", "2": "DEV_VBUS_DET"})
 PARTS["R_J9VD_B"].pins.update({"1": "DEV_VBUS_DET", "2": "GND"})
 PARTS["PICO"].pins["32"] = "DEV_VBUS_DET"
 
-# --- Device D+ pull-up gate (DESIGN SS8.2 ruling): an NMOS low-side switch
-# can't source the pull-up, so this is a pass-switch, not a classic high-side
-# gate: R_DPU (1.5k) sits P3V3 -> DEV_DP_PU permanently; Q_DPU (D=DEV_DP_PU,
-# S=DEV_DP, G=DEV_VBUS_DET) only *connects* that pre-charged pull-up net to
-# D+ once VBUS-detect goes high, gating the "attached" signal on host VBUS
-# actually being present.
-PARTS["R_DPU"].pins.update({"1": "P3V3", "2": "DEV_DP_PU"})
-PARTS["Q_DPU"].pins.update({"D": "DEV_DP_PU", "S": "DEV_DP", "G": "DEV_VBUS_DET"})
+# --- Device D+ pull-up gate (review fix): a gate FET driven from the
+# DEV_VBUS_DET divider midpoint (~2.5V) is a source-follower, not a switch --
+# it can only pull D+ to ~Vgate-Vth (~1.7V), below the >=3.0V FS-attach
+# threshold, and its body diode leaks D+ -> the pull-up net whenever D+ is
+# driven high. No FET part choice fixes a gate-voltage ceiling, so DESIGN
+# SS8.2 now specifies firmware-driven soft-connect (sanctioned alternative:
+# "small FET or firmware-driven"): R_DPU (1.5k) sits DEV_DP -> DEV_DP_PU_EN,
+# and firmware drives GP11 high (3.3V) to present the pull-up or
+# reconfigures it to Hi-Z input to soft-disconnect. The gate decision (host
+# VBUS actually present) comes from firmware reading DEV_VBUS_DET (GP27),
+# not from any netlist-level gating.
+PARTS["R_DPU"].pins.update({"1": "DEV_DP", "2": "DEV_DP_PU_EN"})
+PARTS["PICO"].pins["15"] = "DEV_DP_PU_EN"   # GP11 (pad 15 per _PICO_GPIO_PAD)
 
 # --- Native VBUS-detect hardware test tap (DESIGN SS9): VBUS_NET -> JP4 ->
 # 8.2k/8.2k -> GND, midpoint = NATIVE_VBUS_DET = GP16. JP4 (fitted by default)

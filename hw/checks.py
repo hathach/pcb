@@ -5,7 +5,7 @@ from hw.fp_lib import FP
 
 def test_parts():
     need = {"PICO","J1B","J2B","J3","J4","J5","J6","J7","J8","J9","J_UART","J_STEMMA",
-            "JP1","JP2","JP3","JP4","SW1","U_HSW","Q_DPU","U_ISNS","TP1","TP2","TP3"}
+            "JP1","JP2","JP3","JP4","SW1","U_HSW","U_ISNS","TP1","TP2","TP3"}
     assert need <= set(PARTS), f"missing refs: {need - set(PARTS)}"
     assert len(PARTS["PICO"].pins) == 40
     for ref,p in PARTS.items():
@@ -41,10 +41,18 @@ def test_usb_nets():
     # report): (a) the committed U_HSW Part uses logical pin name "FLG" for
     # the fault/flag pin (not "OC" -- "OC" only appears in a datasheet-pin
     # comment); (b) the TP1 line is simplified to a plain membership assert.
-    from hw.netlist import net_pins, series_between, divider_ratio
+    from hw.netlist import net_pins, series_between, divider_ratio, _PICO_GPIO_PAD
     assert divider_ratio("VBUS_NET","NATIVE_VBUS_DET") == (8200,8200)   # via JP4
     assert divider_ratio("J9_VBUS","DEV_VBUS_DET") == (8200,8200)
     assert series_between("GP20","HOST_DP")                              # 22R series (any R)
     assert ("U_HSW","EN") in net_pins("HOST_VBUS_EN") and ("U_HSW","FLG") in net_pins("HOST_VBUS_FLT")
     assert ("TP1","1") in net_pins("HOST_DP")   # probe point present
-    assert ("Q_DPU","G") in net_pins("DEV_VBUS_DET")                     # gating FET controlled by detect
+    # Review fix: Q_DPU (NMOS gated from the DEV_VBUS_DET divider midpoint)
+    # was electrically unworkable as a pass-switch -- replaced by a firmware
+    # soft-connect on GP11 (drive high = attach, Hi-Z = detach); the gate
+    # decision now lives in firmware reading DEV_VBUS_DET (GP27), not in the
+    # netlist. Pad for GP11 is derived from the model's own GPIO<->pad map,
+    # not hand-counted.
+    assert series_between("DEV_DP","DEV_DP_PU_EN","R_DPU")
+    gp11_pad = next(pad for pad, gpio in _PICO_GPIO_PAD.items() if gpio == 11)
+    assert ("PICO", gp11_pad) in net_pins("DEV_DP_PU_EN")
