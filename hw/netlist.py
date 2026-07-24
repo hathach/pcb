@@ -181,6 +181,11 @@ _add(Part("LED_PWR", "LED", "led0603", _pins("1", "2")))
 _add(Part("R_LED_USER", "1k", "r0402", _pins("1", "2")))
 _add(Part("R_LED_PWR", "1k", "r0402", _pins("1", "2")))
 
+# --- Host-VBUS bulk/decoupling caps (Task 4; DESIGN SS8.1: 10-22uF bulk +
+# 0.1uF at the connector) --------------------------------------------------
+_add(Part("C_HVBUS_BULK", "22u", "c0805", _pins("1", "2")))
+_add(Part("C_HVBUS_100n", "100n", "c0402", _pins("1", "2")))
+
 # --- Probe points --------------------------------------------------------
 _add(Part("TP1", "TP", "testpoint", _pins("1")))
 _add(Part("TP2", "TP", "testpoint", _pins("1")))
@@ -194,6 +199,57 @@ _add(Part("U_INA219_ALT", "INA219", "isense", _numbered(5), dnp=True))
 _add(Part("D_J9_BUSPWR", "1N4148W", "sod123", _pins("1", "2"), dnp=True))
 # J_TRACE_TP: optional 1x6 100-mil test header on the five trace nets + GND.
 _add(Part("J_TRACE_TP", "TRACE_TP", "hdr_1x06", _numbered(6), dnp=True))
+
+
+# --------------------------------------------------------------------------
+# Task 4: power & ground nets
+# --------------------------------------------------------------------------
+# JP1 (DESIGN SS7): pin1=V5_JTRACE (J-Trace 5V), pin3=VBUS_NET (the single
+# hard-tied USB-side node: PICO pin 40 / module micro-USB / J8 / external-5V
+# injection -- never switch-broken), pin2=VBUS_SEL is JP1's *selected*
+# output (board 5V rail) that feeds the host load switch + power LED.
+PARTS["JP1"].pins.update({"1": "V5_JTRACE", "2": "VBUS_SEL", "3": "VBUS_NET"})
+
+PARTS["PICO"].pins.update({
+    "40": "VBUS_NET",   # SS7: hard-tied USB-side node, never switched
+    "39": "VSYS",
+    "36": "P3V3",
+    "35": "AREF",       # fixes G-2
+    "37": "P3V3_EN",    # fixes G-2
+    "3": "GND", "8": "GND", "13": "GND", "18": "GND",
+    "23": "GND", "28": "GND", "33": "GND", "38": "GND",
+})
+
+PARTS["J3"].pins.update({
+    "11": "V5_JTRACE", "13": "V5_JTRACE",
+    "3": "GND", "5": "GND", "9": "GND", "15": "GND", "17": "GND", "19": "GND",
+})
+
+# Host load switch (SS8.1): VBUS_SEL -> IN, OUT -> HOST_VBUS -> J5 VBUS.
+# EN/FLG (GP17/GP15) stay None -- Task 6.
+PARTS["U_HSW"].pins.update({"IN": "VBUS_SEL", "OUT": "HOST_VBUS", "GND": "GND"})
+PARTS["J5"].pins.update({"VBUS": "HOST_VBUS", "GND": "GND"})
+
+# HOST_VBUS bulk + decoupling caps at the connector (SS8.1).
+PARTS["C_HVBUS_BULK"].pins.update({"1": "HOST_VBUS", "2": "GND"})
+PARTS["C_HVBUS_100n"].pins.update({"1": "HOST_VBUS", "2": "GND"})
+
+PARTS["J8"].pins.update({"1": "VBUS_NET", "5": "GND"})   # micro-B PWR: 1=VBUS,5=GND
+
+# Debug-jack + peripheral + ESD grounds (signal pins left for their own tasks).
+PARTS["J4"].pins["2"] = "GND"          # JST-SH-3 DEBUG: 1=SWCLK,2=GND,3=SWDIO
+PARTS["J7"].pins["2"] = "GND"          # mirrors J4
+PARTS["J_UART"].pins["3"] = "GND"      # 1=TX,2=RX,3=GND
+PARTS["J_STEMMA"].pins["1"] = "GND"    # Adafruit order: 1=GND,2=3V3,3=SDA,4=SCL
+PARTS["ESD_H"].pins["GND"] = "GND"
+PARTS["ESD_D"].pins["GND"] = "GND"
+PARTS["SW1"].pins["2"] = "GND"         # RESET button: 1->NRESET (Task 5), 2->GND
+
+# Power LED: VBUS_SEL -> R_LED_PWR -> LED_PWR anode; cathode -> GND. LED pad
+# numbering follows the KiCad "LED" symbol default (pad1=K/cathode,
+# pad2=A/anode) -- keep LED_USER (Task 7) consistent with this convention.
+PARTS["R_LED_PWR"].pins.update({"1": "VBUS_SEL", "2": "LED_PWR_A"})
+PARTS["LED_PWR"].pins.update({"2": "LED_PWR_A", "1": "GND"})
 
 
 # --------------------------------------------------------------------------

@@ -10,3 +10,15 @@ def test_parts():
     assert len(PARTS["PICO"].pins) == 40
     for ref,p in PARTS.items():
         assert p.fp_class in FP, f"{ref}: unknown fp_class {p.fp_class}"
+
+
+def test_power_nets():
+    # NOTE: the brief's snippet used ("U_HSW","VOUT"); Task 3's committed
+    # TPS2051B padmap names that logical pin "OUT" (see netlist.py padmap
+    # comment) -- adjusted here to match the committed model, same intent.
+    from hw.netlist import net_pins, PARTS
+    assert net_pins("V5_JTRACE") >= {("J3","11"),("J3","13"),("JP1","1")}
+    assert ("J5","VBUS") in net_pins("HOST_VBUS") and ("U_HSW","OUT") in net_pins("HOST_VBUS")
+    assert ("PICO","40") in net_pins("VBUS_NET")
+    for pad in ("35","37"):                       # no orphan power pins (G-2)
+        assert PARTS["PICO"].pins[pad] is not None, f"PICO pin {pad} unassigned"
