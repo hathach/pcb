@@ -34,3 +34,17 @@ def test_trace_nets():
         refs = {r for r,_ in net_pins(probe)}
         assert {"J3","J4","J6","J7"} <= refs, f"{probe} not on all debug conns: {refs}"
     assert ("SW1","1") in net_pins("NRESET")
+
+
+def test_usb_nets():
+    # NOTE: two adjustments to the brief's snippet (authorized, see task-6
+    # report): (a) the committed U_HSW Part uses logical pin name "FLG" for
+    # the fault/flag pin (not "OC" -- "OC" only appears in a datasheet-pin
+    # comment); (b) the TP1 line is simplified to a plain membership assert.
+    from hw.netlist import net_pins, series_between, divider_ratio
+    assert divider_ratio("VBUS_NET","NATIVE_VBUS_DET") == (8200,8200)   # via JP4
+    assert divider_ratio("J9_VBUS","DEV_VBUS_DET") == (8200,8200)
+    assert series_between("GP20","HOST_DP")                              # 22R series (any R)
+    assert ("U_HSW","EN") in net_pins("HOST_VBUS_EN") and ("U_HSW","FLG") in net_pins("HOST_VBUS_FLT")
+    assert ("TP1","1") in net_pins("HOST_DP")   # probe point present
+    assert ("Q_DPU","G") in net_pins("DEV_VBUS_DET")                     # gating FET controlled by detect

@@ -230,6 +230,9 @@ PARTS["J3"].pins.update({
 
 # Host load switch (SS8.1): VBUS_SEL -> IN, OUT -> HOST_VBUS -> J5 VBUS.
 # EN/FLG (GP17/GP15) stay None -- Task 6.
+# NOTE (Task 6): IN's net is retargeted from VBUS_SEL to HOST_5V_IN below --
+# Task 6 inserts R_SHUNT upstream of IN for current sensing (SS10). This
+# test's assertions don't cover IN's net so the change is safe (verified).
 PARTS["U_HSW"].pins.update({"IN": "VBUS_SEL", "OUT": "HOST_VBUS", "GND": "GND"})
 PARTS["J5"].pins.update({"VBUS": "HOST_VBUS", "GND": "GND"})
 
@@ -304,6 +307,100 @@ PARTS["J3"].pins.update({"12": "TRACECLK", "14": "TD0", "16": "TD1", "18": "TD2"
 PARTS["PICO"].pins.update({"1": "GP0", "9": "GP6"})
 PARTS["JP2"].pins.update({"1": "GP0", "2": "GND"})
 PARTS["JP3"].pins.update({"1": "GP6", "2": "GND"})
+
+
+# --------------------------------------------------------------------------
+# Task 6: USB host, USB device, VBUS-detect taps
+# --------------------------------------------------------------------------
+
+# --- Host port (DESIGN SS8.1): PICO GP20/GP21 -> 22R series -> HOST_DP/DM ->
+# J5, with 15k pulldowns and ESD_H across the pair. GPn stays a bare net on
+# the PICO/socket side (source-series convention, same as the trace bus).
+PARTS["PICO"].pins.update({"26": "GP20", "27": "GP21"})
+PARTS["R_HDP"].pins.update({"1": "GP20", "2": "HOST_DP"})
+PARTS["R_HDM"].pins.update({"1": "GP21", "2": "HOST_DM"})
+PARTS["R_HDP_PD"].pins.update({"1": "HOST_DP", "2": "GND"})
+PARTS["R_HDM_PD"].pins.update({"1": "HOST_DM", "2": "GND"})
+PARTS["J5"].pins.update({"DP": "HOST_DP", "DM": "HOST_DM"})
+# ESD_H: IO1/IO1B are the same internal channel (feed-through pads), likewise
+# IO2/IO2B -- so one channel per line: IO1/IO1B -> HOST_DP, IO2/IO2B -> HOST_DM.
+PARTS["ESD_H"].pins.update({
+    "IO1": "HOST_DP", "IO1B": "HOST_DP",
+    "IO2": "HOST_DM", "IO2B": "HOST_DM",
+    "VBUS": "HOST_VBUS",
+})
+# Probe points (DESIGN SS8.1, fixes G-3): TP1/TP2/TP3 on D+/D-/GND at the port.
+PARTS["TP1"].pins["1"] = "HOST_DP"
+PARTS["TP2"].pins["1"] = "HOST_DM"
+PARTS["TP3"].pins["1"] = "GND"
+
+# --- Host VBUS switch control (DESIGN SS6/SS8.1): EN/FLG *are* the function
+# node on the PICO side (no series element), per the guard-net docstring case.
+PARTS["PICO"].pins.update({"22": "HOST_VBUS_EN", "20": "HOST_VBUS_FLT"})
+PARTS["U_HSW"].pins.update({"EN": "HOST_VBUS_EN", "FLG": "HOST_VBUS_FLT"})
+
+# --- Current sense (DESIGN SS8.1/SS10): shunt placed *upstream* of U_HSW so
+# it measures switch + downstream draw without disturbing HOST_VBUS (Task 4's
+# wiring, unchanged): VBUS_SEL -> R_SHUNT -> HOST_5V_IN -> U_HSW IN. U_ISNS
+# senses across the shunt; OUT is itself the GP26 ADC function node (no
+# series element between them, so no hop -- same pattern as ISENSE/NATIVE_
+# VBUS_DET/DEV_VBUS_DET in the module docstring).
+PARTS["R_SHUNT"].pins.update({"1": "VBUS_SEL", "2": "HOST_5V_IN"})
+PARTS["U_HSW"].pins["IN"] = "HOST_5V_IN"
+PARTS["U_ISNS"].pins.update({
+    "IN+": "VBUS_SEL", "IN-": "HOST_5V_IN",
+    "OUT": "ISENSE", "VS": "P3V3", "GND": "GND",
+})
+PARTS["PICO"].pins["31"] = "ISENSE"
+
+# --- Device port (DESIGN SS8.2): PICO GP18/GP19 -> 22R series -> DEV_DP/DM ->
+# J9, with ESD_D across the pair. J9 numbering follows J8's convention
+# (1 VBUS, 2 D-, 3 D+, 4 ID, 5 GND, 6 shield); ID stays unassigned (device-
+# only connector, same treatment as J8's untouched D+/D-/ID/shield in Task 4).
+PARTS["PICO"].pins.update({"24": "GP18", "25": "GP19"})
+PARTS["R_DDP"].pins.update({"1": "GP18", "2": "DEV_DP"})
+PARTS["R_DDM"].pins.update({"1": "GP19", "2": "DEV_DM"})
+PARTS["ESD_D"].pins.update({
+    "IO1": "DEV_DP", "IO1B": "DEV_DP",
+    "IO2": "DEV_DM", "IO2B": "DEV_DM",
+    "VBUS": "J9_VBUS",
+})
+PARTS["J9"].pins.update({"1": "J9_VBUS", "2": "DEV_DM", "3": "DEV_DP", "5": "GND", "6": "GND"})
+
+# --- Device VBUS-detect divider (DESIGN SS8.2): J9_VBUS -> 8.2k/8.2k -> GND,
+# midpoint = DEV_VBUS_DET = GP27 (divider midpoint, itself the function node).
+PARTS["R_J9VD_T"].pins.update({"1": "J9_VBUS", "2": "DEV_VBUS_DET"})
+PARTS["R_J9VD_B"].pins.update({"1": "DEV_VBUS_DET", "2": "GND"})
+PARTS["PICO"].pins["32"] = "DEV_VBUS_DET"
+
+# --- Device D+ pull-up gate (DESIGN SS8.2 ruling): an NMOS low-side switch
+# can't source the pull-up, so this is a pass-switch, not a classic high-side
+# gate: R_DPU (1.5k) sits P3V3 -> DEV_DP_PU permanently; Q_DPU (D=DEV_DP_PU,
+# S=DEV_DP, G=DEV_VBUS_DET) only *connects* that pre-charged pull-up net to
+# D+ once VBUS-detect goes high, gating the "attached" signal on host VBUS
+# actually being present.
+PARTS["R_DPU"].pins.update({"1": "P3V3", "2": "DEV_DP_PU"})
+PARTS["Q_DPU"].pins.update({"D": "DEV_DP_PU", "S": "DEV_DP", "G": "DEV_VBUS_DET"})
+
+# --- Native VBUS-detect hardware test tap (DESIGN SS9): VBUS_NET -> JP4 ->
+# 8.2k/8.2k -> GND, midpoint = NATIVE_VBUS_DET = GP16. JP4 (fitted by default)
+# is the divider's top-leg jumper so divider_ratio hops it transparently.
+PARTS["JP4"].pins.update({"1": "VBUS_NET", "2": "NVD_TOP"})
+PARTS["R_NVD_T"].pins.update({"1": "NVD_TOP", "2": "NATIVE_VBUS_DET"})
+PARTS["R_NVD_B"].pins.update({"1": "NATIVE_VBUS_DET", "2": "GND"})
+PARTS["PICO"].pins["21"] = "NATIVE_VBUS_DET"
+
+# --- DNP odds and ends -------------------------------------------------
+# D_J9_BUSPWR (DNP, SOD-123 diode default pad1=A/pad2=K): documents the
+# optional J9-VBUS -> VBUS_NET bus-power path per the direction ruling --
+# anode on J9_VBUS, cathode on VBUS_NET, so host VBUS could only ever feed
+# the board rail, never backfeed the host connector. Never populated (dnp),
+# so it can't bridge the two nets in the graph helpers.
+PARTS["D_J9_BUSPWR"].pins.update({"1": "J9_VBUS", "2": "VBUS_NET"})
+# U_INA219_ALT: paper-only INA219-over-I2C alternative to U_ISNS (DESIGN
+# SS10/SS14) -- never populated, so all pins are marked no-connect rather
+# than wired to any net.
+PARTS["U_INA219_ALT"].nc |= {"1", "2", "3", "4", "5"}
 
 
 # --------------------------------------------------------------------------
