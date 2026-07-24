@@ -4,166 +4,176 @@
 
 **Goal:** Produce a manufacturable KiCad 9 project (schematic + 2-layer PCB, DRC-clean, with gerbers/BOM/bring-up note) for the Pico 2 SWD+ETM trace motherboard specified in `DESIGN.md`.
 
-**Architecture:** Connectivity is authored **once** as a Python single-source-of-truth (`hw/netlist.py`: a parts table + a nets table transcribed from `DESIGN.md`). That model (a) drives `pcbnew` scripting to instantiate footprints, nets, board outline, stackup, net classes, placement, the SI-critical routing, and the ground pour, and (b) emits a KiCad `.net` netlist used for ERC/BOM cross-checks and to draw the schematic. Verification is by `kicad-cli sch erc`, `kicad-cli pcb drc`, and Python assertions over the model/board. The visual schematic is drawn in eeschema from the netlist + the Adafruit reference schematics (KiCad imports Eagle `.lbr`/`.sch` via the GUI); Task 1 first attempts to automate schematic generation in a venv, and if that yields a KiCad-9-clean schematic it supersedes the manual draw.
+**Architecture:** Connectivity is authored **once** as a Python single-source-of-truth (`hw/netlist.py`: a parts table + a nets table transcribed from `DESIGN.md`). That model (a) drives `pcbnew` scripting to instantiate footprints, nets, board outline, stackup, net classes, placement, the SI-critical routing, and the ground pour, and (b) emits a KiCad `.net` netlist used for ERC/BOM cross-checks and to draw the schematic. Verification is by `kicad-cli sch erc`, `kicad-cli pcb drc --format json` (parsed in Python — never grep stdout), and Python assertions over the model/board. The visual schematic is drawn in eeschema from the netlist + the Adafruit reference schematics; Task 1 first attempts to automate it via SKiDL's `KICAD9` target in a venv, and if that yields a KiCad-9-clean schematic it supersedes the manual draw.
 
-**Tech Stack:** KiCad 9.0.2 (`kicad-cli`, `pcbnew` Python API), Python 3, KiCad stock symbol/footprint libraries, Adafruit `MBAdafruitBoards` Eagle libraries (reference), a project venv for optional schematic automation.
+**Tech Stack:** KiCad 9.0.2 (`kicad-cli`, `pcbnew` Python API), Python 3 + pytest, KiCad stock symbol/footprint libraries, Adafruit `MBAdafruitBoards` Eagle libraries (reference), a project venv for optional schematic automation.
+
+## Verified environment facts (from review, KiCad 9.0.2 — obey these)
+
+- `Module:RaspberryPi_Pico_Common_THT` has 40 THT pads numbered **"1"–"40" by physical header pin** (1–20 left column, 21–40 right). This footprint **is** the inner-socket land pattern — do **not** add separate inner-socket footprints on top of it.
+- `pcbnew.SaveBoard` does **not** persist net classes (they live in `.kicad_pro`) — after setting them call `pcbnew.GetSettingsManager().SaveProject()`.
+- `ZONE_FILLER(b).Fill()` **segfaults on an in-memory board** — only fill a board freshly `LoadBoard`-ed from disk.
+- `kicad-cli pcb drc --exit-code-violations` returns **exit 5** on *any* violation including warnings and `unconnected_items` and the empty-board `invalid_outline`. Gate on a **parsed JSON report**, not the exit code or stdout text.
+- `--schematic-parity` is a **bare boolean flag** (no `=yes/no`); parity needs a fully-annotated schematic with footprint↔symbol UUID links that pcbnew-scripted footprints don't have — treat parity as advisory and rely on the Task-9 netlist compare instead.
+- `VECTOR2I.Distance()` raises `TypeError`; use `(p1 - p2).EuclideanNorm()`. `GetUnconnectedCount(False)` requires the arg. `pcbnew.AddHole` does not exist (use `MountingHole` footprints). `b.GetNetClasses()` iterates **wxString keys** (`{str(k) for k in b.GetNetClasses()}`). `LoadBoard` returns `None` (no raise) on a bad path — assert non-None. DRC violation exit code is **5**, never 1.
 
 ## Global Constraints
 
 - **2 layers max**, FR4 1.6 mm. Bottom copper = continuous GND pour under the whole trace group.
-- Target modules: **Pico 2 (RP2350A) and original Pico (RP2040)** — nothing may exceed RP2040 limits (e.g. no bare 5 V on a GPIO; VBUS-sense uses an 8.2 k/8.2 k divider).
+- Target modules: **Pico 2 (RP2350A) and original Pico (RP2040)** — nothing may exceed RP2040 limits (no bare 5 V on a GPIO; VBUS-sense uses an 8.2 k/8.2 k divider).
 - **Trace nets (GP1–GP5):** 27 Ω source series at the socket pins, runs < 30 mm, CLK↔data length-matched within a few mm, no other loading; MIPI-20 within ~3 cm of the socket. GP0/GP6 are GND-guard pins (removable jumpers).
-- Pin map, connector list, and net topology are **exactly** as in `DESIGN.md` §4–§10 — that document is authoritative; this plan implements it.
+- Pin map, connector list, and net topology are **exactly** as in `DESIGN.md` §4–§10 — that document is authoritative; this plan implements it. **All 40 Pico pins** get a net (function nets, or breakout-only nets) — none may be left unassigned.
 - Every table written into any doc is column-aligned (`tools/align_md_tables.py`).
 - Deliverables land in `~/code/jtrace/pico2_trace_motherboard/`; final schematic PDF + bring-up note also archived to the calibre library.
 
 ## File structure
 
-| Path                        | Responsibility                                                            |
-| --------------------------- | ------------------------------------------------------------------------- |
-| `pico2_trace.kicad_pro`     | KiCad project file                                                        |
-| `pico2_trace.kicad_sch`     | Schematic (root + hierarchical sheets)                                    |
-| `pico2_trace.kicad_pcb`     | Board                                                                     |
-| `pico2_trace.pretty/`       | Local footprint library (custom + copied-stock footprints)                |
-| `sym/pico2_trace.kicad_sym` | Local symbol library (custom symbols: Pico module, connectors)            |
-| `hw/netlist.py`             | Single source of truth: `PARTS` + `NETS`; emits `.net`; importable model  |
-| `hw/build_board.py`         | `pcbnew` driver: footprints, nets, stackup, classes, outline, placement   |
-| `hw/route_trace.py`         | `pcbnew` driver: SI-critical routing (trace bundle, guards, power) + pour |
-| `hw/checks.py`              | Python assertions over `netlist.py` / the built board                     |
-| `hw/fp_lib.py`              | Footprint resolution table (ref → library:footprint)                      |
-| `tools/align_md_tables.py`  | (exists) markdown table aligner                                           |
-| `docs/BOM.csv`              | Bill of materials (generated)                                             |
-| `docs/BRINGUP.md`           | One-page bring-up note                                                    |
-| `fab/`                      | Generated gerbers, drill, position files, 3D render                       |
+| Path                        | Responsibility                                                                 |
+| --------------------------- | ------------------------------------------------------------------------------ |
+| `pico2_trace.kicad_pro`     | KiCad project file (generated by `SaveBoard`/`SaveProject` — never hand-write) |
+| `pico2_trace.kicad_sch`     | Schematic (root + hierarchical sheets)                                         |
+| `pico2_trace.kicad_pcb`     | Board                                                                          |
+| `pico2_trace.pretty/`       | Local footprint library (custom shroud footprints)                             |
+| `sym/pico2_trace.kicad_sym` | Local symbol library (Pico module, MIPI-20, etc.)                              |
+| `hw/__init__.py`            | Makes `hw/` a package (import + `python3 -m hw.x` both work)                   |
+| `hw/netlist.py`             | Single source of truth: `PARTS` + `NETS`; helpers; emits `.net`                |
+| `hw/fp_lib.py`              | Footprint resolution table (part class → `library:footprint`)                  |
+| `hw/build_board.py`         | `pcbnew` driver: footprints, nets, stackup, classes, outline                   |
+| `hw/place.py`               | Placement coordinate table                                                     |
+| `hw/route_trace.py`         | `pcbnew` driver: SI-critical routing + GND pour                                |
+| `hw/checks.py`              | pytest assertions + `--compare-netlists` + `--drc-gate` helpers                |
+| `tools/align_md_tables.py`  | (exists) markdown table aligner                                                |
+| `docs/BOM.csv`              | Bill of materials (generated)                                                  |
+| `docs/BRINGUP.md`           | One-page bring-up note                                                         |
+| `fab/`                      | Generated gerbers, drill, position files, 3D render                            |
 
 ---
 
-### Task 1: Project scaffold, toolchain verification, schematic-automation spike
+### Task 1: Project scaffold, toolchain verification, SKiDL spike
 
-**Files:**
-- Create: `pico2_trace.kicad_pro`, `pico2_trace.kicad_pcb` (empty board), `sym-lib-table`, `fp-lib-table`
-- Create: `hw/spike_sch.py` (throwaway), `.venv/` (gitignored)
-- Modify: `.gitignore` (add `.venv/`, `fab/`)
+**Files:** Create `pico2_trace.kicad_pcb` (with placeholder outline), `fp-lib-table`, `sym-lib-table`, `hw/__init__.py`; create `.venv/` (gitignored); modify `.gitignore` (add `.venv/`, `fab/`).
 
-**Interfaces:**
-- Produces: a valid empty KiCad project that `kicad-cli` accepts; a recorded decision `SCHEMATIC_MODE ∈ {auto, gui}` written to `docs/BRINGUP.md` (Toolchain section).
+**Interfaces:** Produces a valid project `kicad-cli` accepts and a recorded `SCHEMATIC_MODE ∈ {auto, gui}` in `docs/BRINGUP.md`.
 
-- [ ] **Step 1: Create the empty project + board via pcbnew**
+- [ ] **Step 1: Create the board (with a placeholder outline so DRC is meaningful) + lib tables**
 
 ```bash
-cd ~/code/jtrace/pico2_trace_motherboard
+cd ~/code/jtrace/pico2_trace_motherboard && mkdir -p pico2_trace.pretty sym hw fab docs && touch hw/__init__.py
 python3 - <<'PY'
 import pcbnew
 b = pcbnew.BOARD()
-pcbnew.SaveBoard("pico2_trace.kicad_pcb", b)
+# placeholder 65x34 mm Edge.Cuts rectangle (Task 11 replaces it)
+for (x1,y1,x2,y2) in [(0,0,65,0),(65,0,65,34),(65,34,0,34),(0,34,0,0)]:
+    s=pcbnew.PCB_SHAPE(b); s.SetShape(pcbnew.SHAPE_T_SEGMENT); s.SetLayer(pcbnew.Edge_Cuts)
+    s.SetStart(pcbnew.VECTOR2I(pcbnew.FromMM(x1),pcbnew.FromMM(y1)))
+    s.SetEnd(pcbnew.VECTOR2I(pcbnew.FromMM(x2),pcbnew.FromMM(y2))); b.Add(s)
+b.SetCopperLayerCount(2)
+pcbnew.SaveBoard("pico2_trace.kicad_pcb", b)   # also writes a full .kicad_pro/.kicad_prl
 print("board saved")
 PY
-printf '(kicad_project)\n' > /dev/null   # project file created next step
-```
-
-- [ ] **Step 2: Create a minimal project file and lib tables**
-
-```bash
-cat > pico2_trace.kicad_pro <<'EOF'
-{ "board": {}, "meta": {"filename":"pico2_trace.kicad_pro","version":1}, "sheets": [], "libraries": {} }
-EOF
 printf '(fp_lib_table\n  (lib (name "pico2_trace")(type "KiCad")(uri "${KIPRJMOD}/pico2_trace.pretty")(options "")(descr ""))\n)\n' > fp-lib-table
 printf '(sym_lib_table\n  (lib (name "pico2_trace")(type "KiCad")(uri "${KIPRJMOD}/sym/pico2_trace.kicad_sym")(options "")(descr ""))\n)\n' > sym-lib-table
-mkdir -p pico2_trace.pretty sym hw fab docs
 ```
+Do **not** hand-write `.kicad_pro` — `SaveBoard` produced a complete one.
 
-- [ ] **Step 3: Verify the board loads and DRC runs (baseline)**
+- [ ] **Step 2: Baseline DRC (JSON, parsed — establishes the gate pattern)**
 
-Run: `kicad-cli pcb drc --exit-code-violations pico2_trace.kicad_pcb; echo "exit=$?"`
-Expected: a DRC report prints, `exit=0` (empty board has no violations).
+```bash
+kicad-cli pcb drc --format json -o /tmp/drc.json pico2_trace.kicad_pcb >/dev/null 2>&1
+python3 -c "import json;v=json.load(open('/tmp/drc.json'))['violations'];print('violations:',[x['type'] for x in v])"
+```
+Expected: `violations: []` (placeholder outline present, empty board). If you skipped the outline you'd instead see `['invalid_outline']` at exit 5 — that is the reason for the placeholder.
 
-- [ ] **Step 4: Spike — can we auto-generate a KiCad-9 schematic in a venv?**
+- [ ] **Step 3: SKiDL spike — actually generate a KiCad-9 schematic (not just `import skidl`)**
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
-pip install -q skidl kinet 2>&1 | tail -2 || echo "PIP_FAILED"
-python3 - <<'PY' 2>&1 | tail -5
+pip install -q skidl kinet2pcb kinparse 2>&1 | tail -2 || echo "PIP_FAILED"
+KICAD9_SYMBOL_DIR=/usr/share/kicad/symbols python3 - <<'PY' 2>&1 | tail -6
 try:
-    import skidl; print("skidl", skidl.__version__)
-    # minimal 2-part net → KiCad netlist
-    from skidl import Part, Net, generate_netlist
-    print("SKIDL_OK")
+    import skidl
+    from skidl import Part, Net, set_default_tool, KICAD9, generate_schematic
+    set_default_tool(KICAD9)
+    r1=Part("Device","R",value="8.2k",footprint="Resistor_SMD:R_0402_1005Metric")
+    n=Net("N1"); n += r1[1]
+    generate_schematic()          # writes ./*.kicad_sch
+    print("SKIDL_GEN_OK", __import__('glob').glob('*.kicad_sch'))
 except Exception as e:
-    print("SKIDL_UNAVAILABLE", e)
+    print("SKIDL_UNAVAILABLE", type(e).__name__, e)
 PY
 deactivate
 ```
 
-- [ ] **Step 5: Record the decision**
+- [ ] **Step 4: Smoke-test any generated schematic + record the decision**
 
-If Step 4 printed `SKIDL_OK` **and** a later smoke test (Task 9) confirms KiCad 9 opens the generated schematic, set `SCHEMATIC_MODE=auto`; otherwise `SCHEMATIC_MODE=gui`. Write the chosen mode + the pip/venv result into `docs/BRINGUP.md` under a `## Toolchain` heading.
+If Step 3 printed `SKIDL_GEN_OK`, run `kicad-cli sch erc <that>.kicad_sch; echo exit=$?` — if ERC runs (exit 0/5, not a parse crash) set `SCHEMATIC_MODE=auto`, else `gui`. If Step 3 failed (`PIP_FAILED`/`SKIDL_UNAVAILABLE`) set `SCHEMATIC_MODE=gui`. Write the mode + evidence into `docs/BRINGUP.md` under `## Toolchain`. (Known SKiDL caveats to note: flat output, crude placement, output filename fixed to `./*.kicad_sch`, custom symbols must pre-exist.)
 
-- [ ] **Step 6: Commit**
-
-```bash
-git add -A && git commit -m "scaffold: empty KiCad project, lib tables, toolchain spike result"
-```
+- [ ] **Step 5: Commit** — `git add -A && git commit -m "scaffold: KiCad project + placeholder outline + SKiDL spike result"`
 
 ---
 
 ### Task 2: Local footprint & symbol libraries
 
-**Files:**
-- Create: `hw/fp_lib.py` (ref-class → `library:footprint` map)
-- Create: custom footprints in `pico2_trace.pretty/` (see table)
-- Create: `sym/pico2_trace.kicad_sym` (custom symbols: Pico module, MIPI-20, 2×5 Cortex, JST-SH, USB-A/micro-B, load switch, ESD, INA181)
+**Files:** Create `hw/fp_lib.py`; custom footprints in `pico2_trace.pretty/`; `sym/pico2_trace.kicad_sym`.
 
-**Interfaces:**
-- Produces: `FP = {...}` in `hw/fp_lib.py` mapping every part class to a resolvable footprint; a symbol lib covering every custom part. Consumed by Tasks 3, 9, 10.
+**Interfaces:** Produces `FP: dict[part_class -> (lib, footprint)]` resolving every part class in `PARTS`; a symbol lib covering custom parts.
 
-Footprint sourcing (KiCad stock unless noted; Adafruit `.lbr`/metro `.pretty` are references, imported via GUI only where stock is insufficient):
+Footprint sourcing (KiCad stock unless noted; Adafruit `.lbr`/`.sch` are references only):
 
-| Part                       | Footprint                                                            | Source                                                                                  |
-| -------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Pico socket (inner+outer)  | `Module:RaspberryPi_Pico_Common_THT` (+ 2× `PinSocket_1x20_P2.54mm`) | stock                                                                                   |
-| MIPI-20 (J3)               | `pico2_trace:FTSH-110-01-DV` (2×10 1.27 mm, keyed shroud)            | derive from stock `PinHeader_2x10_P1.27mm_Vertical_SMD`                                 |
-| 2×5 Cortex (J6)            | `pico2_trace:FTSH-105-01-DV` (2×5 1.27 mm, keyed)                    | derive from stock `PinHeader_2x05_P1.27mm_Vertical_SMD` / metro `2X05_1.27MM_BOX_POSTS` |
-| JST-SH 3-pin (J4, J7)      | `Connector_JST:JST_SH_SM03B-SRSS-TB_1x03-1MP_P1.00mm_Horizontal`     | stock                                                                                   |
-| USB-A host (J5)            | `Connector_USB:USB_A_Molex_67643_Horizontal`                         | stock                                                                                   |
-| micro-B (J8, J9)           | `Connector_USB:USB_Micro-B_Molex_47346-...`                          | stock                                                                                   |
-| STEMMA-QT I2C              | `Connector_JST:JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal`     | stock (= Adafruit STEMMAQT); ref `stemmaqt_shift.sch`                                   |
-| Load switch (host VBUS)    | `Package_TO_SOT_SMD:SOT-23-5`                                        | stock; ref `adafruit_power.lbr`                                                         |
-| ESD array (USBLC6-2SC6)    | `Package_TO_SOT_SMD:SOT-23-6`                                        | stock                                                                                   |
-| Current-sense amp (INA181) | `Package_TO_SOT_SMD:SOT-23-5`                                        | stock                                                                                   |
-| Reset button SW1           | `Button_Switch_SMD:SW_SPST_...` (top-actuated 6 mm)                  | stock; ref `adafruit_electromech.lbr`                                                   |
-| R/C 0402, LEDs 0603, shunt | stock `Resistor_SMD`, `LED_SMD`, `Capacitor_SMD`                     | stock                                                                                   |
-| Jumpers JP1–JP4            | `Connector_PinHeader_2.54mm:PinHeader_1x0{2,3}_P2.54mm_Vertical`     | stock                                                                                   |
+| Part class                        | Footprint                                                                                                       | Source                                            |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `pico_socket` (PICO)              | `Module:RaspberryPi_Pico_Common_THT` (40 THT pads = inner sockets)                                              | stock (IS the socket land pattern — BL-1)         |
+| `breakout_1x20` (J1B,J2B)         | `Connector_PinSocket_2.54mm:PinSocket_1x20_P2.54mm_Vertical`                                                    | stock                                             |
+| `mipi20` (J3)                     | `pico2_trace:FTSH-110-01-DV` (2×10 1.27, keyed shroud)                                                          | derive from `PinHeader_2x10_P1.27mm_Vertical_SMD` |
+| `cortex10` (J6)                   | `pico2_trace:FTSH-105-01-DV` (2×5 1.27, keyed)                                                                  | derive from `PinHeader_2x05_P1.27mm_Vertical_SMD` |
+| `jst_sh3` (J4, J7)                | `Connector_JST:JST_SH_SM03B-SRSS-TB_1x03-1MP_P1.00mm_Horizontal`                                                | stock                                             |
+| `jst_sh4` (J_STEMMA)              | `Connector_JST:JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal`                                                | stock (= Adafruit STEMMA-QT)                      |
+| `usb_a` (J5)                      | `Connector_USB:USB_A_Molex_67643_Horizontal`                                                                    | stock                                             |
+| `usb_microb` (J8, J9)             | `Connector_USB:USB_Micro-B_Molex_47346-0001`                                                                    | stock                                             |
+| `hdr_1x03` (J_UART, JP1)          | `Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical`                                                    | stock                                             |
+| `hdr_1x02` (JP2,JP3,JP4)          | `Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical`                                                    | stock                                             |
+| `loadswitch` (U_HSW)              | `Package_TO_SOT_SMD:SOT-23-5`                                                                                   | stock; ref `adafruit_power.lbr`                   |
+| `esd6` (ESD_H, ESD_D)             | `Package_TO_SOT_SMD:SOT-23-6` (USBLC6-2SC6)                                                                     | stock                                             |
+| `isense` (U_ISNS, INA181)         | `Package_TO_SOT_SMD:SOT-23-5`                                                                                   | stock                                             |
+| `fet3` (Q_DPU)                    | `Package_TO_SOT_SMD:SOT-23` (D+ pull-up gating FET)                                                             | stock (fixes G-5)                                 |
+| `button` (SW1)                    | `Button_Switch_SMD:SW_SPST_B3S-1000`                                                                            | stock; ref `adafruit_electromech.lbr`             |
+| `testpoint` (TP1..TP3)            | `TestPoint:TestPoint_Pad_D1.5mm`                                                                                | stock (fixes G-3)                                 |
+| `mounthole`                       | `MountingHole:MountingHole_3.2mm_M3`                                                                            | stock (fixes BL-10)                               |
+| `r0402`,`c0402`,`led0603`,`shunt` | stock `Resistor_SMD:R_0402_1005Metric`, `C_0402_1005Metric`, `LED_SMD:LED_0603_1608Metric`, `R_1206_3216Metric` | stock                                             |
 
-- [ ] **Step 1: Write `hw/fp_lib.py` with the resolution map** (one dict entry per row above, keyed by part class).
-- [ ] **Step 2: Create the two custom shroud footprints** by copying the stock 1.27 mm SMD pin-header `.kicad_mod` into `pico2_trace.pretty/` and adding the keyed-shroud courtyard/silk + pin-1 marker (edit the s-expr; keep pad numbering 1–20 / 1–10).
+- [ ] **Step 1:** Write `hw/fp_lib.py` with `FP = {...}` (one entry per row).
+- [ ] **Step 2:** Create the two shroud footprints in `pico2_trace.pretty/` by copying the stock 1.27 mm SMD pin-header `.kicad_mod` and adding a keyed-shroud silk/courtyard + pin-1 marker (keep pad numbering 1–20 / 1–10).
 - [ ] **Step 3: Verify every footprint resolves**
 
 ```bash
 python3 - <<'PY'
-import pcbnew, os
+import os
 from hw.fp_lib import FP
 for cls,(lib,fp) in FP.items():
-    path = f"/usr/share/kicad/footprints/{lib}.pretty/{fp}.kicad_mod" if lib!="pico2_trace" else f"pico2_trace.pretty/{fp}.kicad_mod"
-    assert os.path.exists(path) or lib=="Module", f"MISSING {cls}: {path}"
-print("all footprints resolve")
+    p = f"pico2_trace.pretty/{fp}.kicad_mod" if lib=="pico2_trace" else f"/usr/share/kicad/footprints/{lib}.pretty/{fp}.kicad_mod"
+    assert os.path.exists(p), f"MISSING {cls}: {p}"
+print("all", len(FP), "footprint classes resolve")
 PY
 ```
-Expected: `all footprints resolve` (fix any MISSING by correcting the stock footprint name via `ls /usr/share/kicad/footprints/<lib>.pretty/`).
+Expected: `all N footprint classes resolve` (fix MISSING via `ls /usr/share/kicad/footprints/<lib>.pretty/`).
 
-- [ ] **Step 4: Commit** — `git commit -am "lib: local footprint/symbol libraries + resolution map"`
+- [ ] **Step 4:** Author custom symbols in `sym/pico2_trace.kicad_sym` (40-pin Pico module by physical pin; MIPI-20; 2×5 Cortex). This is scripted s-expr authoring, **not** a GUI step; verify with `kicad-cli sym export svg sym/pico2_trace.kicad_sym -o /tmp/sym.svg` (must not error). Stock symbols cover R/C/LED/USB/JST/FET/SOT.
+- [ ] **Step 5: Commit** — `git commit -am "lib: footprint resolution map + shroud footprints + custom symbols"`
 
 ---
 
-### Task 3: Connectivity model — parts table
+### Task 3: Connectivity model — parts + helper functions
 
-**Files:**
-- Create: `hw/netlist.py` (start `PARTS`)
-- Test: `hw/checks.py::test_parts`
+**Files:** Create `hw/netlist.py` (`PARTS` + helpers); `hw/checks.py::test_parts`.
 
-**Interfaces:**
-- Produces: `PARTS: dict[ref -> Part(ref, value, fp_class, pins:dict[padname->netname|None])]`. Consumed by all later tasks. Refs exactly match `DESIGN.md` §4/§6.
+**Interfaces / Produces:**
+- `PARTS: dict[ref -> Part(ref, value, fp_class, pins:dict[padname -> netname|None], nc:set[padname], dnp:bool)]`.
+- `net_pins(net) -> set[(ref, pad)]` — all pads on a net.
+- `series_between(net_a, net_b, r_ref=None) -> bool` — True iff a single 2-pin resistor bridges `net_a` and `net_b` (any R if `r_ref is None`, else exactly that ref).
+- `divider_ratio(top_net, mid_net) -> (r_top_ohms, r_bot_ohms)` — follows `top_net`→R→`mid_net` and `mid_net`→R→`GND`, returning the two resistor values; transparently traverses a fitted jumper (e.g. JP4) in the top leg.
+- `PINMAP: dict[gpio_int -> label_str]` — GPIO→function label ("TRACECLK","TD0","GUARD","I2C0_SDA","LED_USER","BTN_USER","NATIVE_VBUS_DET",…), derived from `PARTS["PICO"].pins`.
 
-- [ ] **Step 1: Write `PARTS`** — one entry per component: the connectors J1,J1B,J2,J2B,J3–J9, JP1–JP4, SW1; the Pico socket; the load switch U(host), ESD arrays, INA181 U(sense), shunt; all R/C/LED; the trace series resistors Rt1–Rt5 (27 Ω); the VBUS-detect dividers; the D+ pull-up + gating FET. `fp_class` references keys from `hw/fp_lib.py`.
+- [ ] **Step 1:** Write `PARTS` for every component in `DESIGN.md` §4/§6: `PICO` (fp_class `pico_socket`, pins "1".."40"); breakout `J1B`,`J2B` (`breakout_1x20`); `J3`–`J9`, `J_UART`, `J_STEMMA`, `JP1`–`JP4`, `SW1`; `U_HSW`, `ESD_H`, `ESD_D`, `U_ISNS`, `Q_DPU`, `R_SHUNT`; `Rt1`–`Rt5` (27 Ω), the 22 Ω USB series, 15 kΩ pulldowns, 1.5 kΩ pull-up, the four 8.2 kΩ divider resistors, LED resistors; `TP1`–`TP3`; the user/power LEDs. Mark DNP parts (`dnp=True`, fixes G-7): `U_INA219_ALT`, `D_J9_BUSPWR`, `J_TRACE_TP` (1×6). Implement the four helper functions.
 - [ ] **Step 2: Write the failing test**
 
 ```python
@@ -171,47 +181,48 @@ Expected: `all footprints resolve` (fix any MISSING by correcting the stock foot
 from hw.netlist import PARTS
 from hw.fp_lib import FP
 def test_parts():
-    need = {"J1","J1B","J2","J2B","J3","J4","J5","J6","J7","J8","J9",
-            "JP1","JP2","JP3","JP4","SW1"}
+    need = {"PICO","J1B","J2B","J3","J4","J5","J6","J7","J8","J9","J_UART","J_STEMMA",
+            "JP1","JP2","JP3","JP4","SW1","U_HSW","Q_DPU","U_ISNS","TP1","TP2","TP3"}
     assert need <= set(PARTS), f"missing refs: {need - set(PARTS)}"
+    assert len(PARTS["PICO"].pins) == 40
     for ref,p in PARTS.items():
         assert p.fp_class in FP, f"{ref}: unknown fp_class {p.fp_class}"
 ```
 
-- [ ] **Step 3: Run it** — `python3 -m pytest hw/checks.py::test_parts -q` → Expected: FAIL (PARTS incomplete), then iterate `PARTS` until PASS.
-- [ ] **Step 4: Commit** — `git commit -am "netlist: parts table"`
+- [ ] **Step 3:** `python3 -m pytest hw/checks.py::test_parts -q` → FAIL, iterate to PASS. **Step 4:** commit `"netlist: parts table + graph helpers"`.
 
 ---
 
-### Task 4: Connectivity model — power & ground nets
+### Task 4: Power & ground nets (all Pico power/ground pins)
 
-**Files:** Modify `hw/netlist.py` (`NETS` power section); `hw/checks.py::test_power_nets`
+**Files:** Modify `hw/netlist.py`; `hw/checks.py::test_power_nets`.
 
-**Interfaces:** Produces named nets `GND, VBUS_NET, V5_JTRACE, VSYS, P3V3, HOST_VBUS`. `VBUS_NET` = Pico pin 40 = J8 VBUS = external inject; `HOST_VBUS` = load-switch output → J5 VBUS.
+**Produces:** `GND, VBUS_NET, V5_JTRACE, VSYS, P3V3, HOST_VBUS`, plus nets for Pico pins **35 (ADC_VREF)** and **37 (3V3_EN)** (fixes G-2).
 
-- [ ] **Step 1: Add the power nets** per `DESIGN.md` §7/§8.1: JP1 selects `VBUS_NET`↔`V5_JTRACE`; `VBUS_NET`→load-switch in, `HOST_VBUS`=switch out→J5 VBUS (+bulk C); MIPI-20 pins 11/13→`V5_JTRACE`; Pico pin 40→`VBUS_NET`, pin 39→`VSYS`, pin 36→`P3V3`; power LED on `VBUS_NET`; every GND pin (Pico 3/8/13/18/23/28/33/38; MIPI-20 3/5/9/15/17/19; all connector grounds)→`GND`.
+- [ ] **Step 1:** Per `DESIGN.md` §7/§8.1: JP1 selects `VBUS_NET`↔`V5_JTRACE`; `VBUS_NET`→`U_HSW` VIN, `HOST_VBUS`=`U_HSW` VOUT→J5 VBUS (+bulk C); MIPI-20 pins 11/13→`V5_JTRACE`; PICO "40"→`VBUS_NET`, "39"→`VSYS`, "36"→`P3V3`, "35"→`AREF`, "37"→`P3V3_EN`; power LED on `VBUS_NET`; all grounds (PICO 3/8/13/18/23/28/33/38; MIPI-20 3/5/9/15/17/19; every connector GND)→`GND`.
 - [ ] **Step 2: Failing test**
 
 ```python
 def test_power_nets():
-    from hw.netlist import PARTS, net_pins
+    from hw.netlist import net_pins, PARTS
     assert net_pins("V5_JTRACE") >= {("J3","11"),("J3","13"),("JP1","1")}
-    assert ("J5","VBUS") in net_pins("HOST_VBUS")
-    assert ("U_HSW","VOUT") in net_pins("HOST_VBUS")   # load switch out
+    assert ("J5","VBUS") in net_pins("HOST_VBUS") and ("U_HSW","VOUT") in net_pins("HOST_VBUS")
     assert ("PICO","40") in net_pins("VBUS_NET")
+    for pad in ("35","37"):                       # no orphan power pins (G-2)
+        assert PARTS["PICO"].pins[pad] is not None, f"PICO pin {pad} unassigned"
 ```
 
-- [ ] **Step 3:** run → fix until PASS. **Step 4:** commit `"netlist: power & ground nets"`.
+- [ ] **Step 3:** run → fix. **Step 4:** commit `"netlist: power & ground nets (incl. pins 35/37)"`.
 
 ---
 
-### Task 5: Connectivity model — debug & trace nets
+### Task 5: Debug & trace nets
 
-**Files:** Modify `hw/netlist.py`; `hw/checks.py::test_trace_nets`
+**Files:** Modify `hw/netlist.py`; `hw/checks.py::test_trace_nets`.
 
-**Interfaces:** Produces `SWDIO, SWCLK, NRESET, VTREF, TRACECLK, TD0..TD3` and the per-trace source-side nets `GP1..GP5` (socket side of Rt).
+**Produces:** `SWDIO, SWCLK, NRESET, VTREF, TRACECLK, TD0..TD3`, source-side `GP1..GP5`.
 
-- [ ] **Step 1:** Wire per `DESIGN.md` §5: SWDIO/SWCLK from J4+J7 fan to J3-pin2/4 and J6-pin2/4; `NRESET`=Pico pin30→J3-pin10, J6-pin10, SW1→GND; `VTREF`=Pico pin36→J3-pin1, J6-pin1. Trace: Pico pin2=`GP1`→Rt1→`TRACECLK`→J3-pin12; pins4/5/6/7=`GP2..GP5`→Rt2..Rt5→`TD0..TD3`→J3-pin14/16/18/20. Guards: JP2 (GP0↔GND), JP3 (GP6↔GND).
+- [ ] **Step 1:** Per `DESIGN.md` §5 (with the corrected `series_between` signature): SWDIO/SWCLK from J4+J7 fan to J3-2/4 and J6-2/4; `NRESET`=PICO "30"→J3-10, J6-10, SW1; `VTREF`=PICO "36" region net→J3-1, J6-1. Trace: PICO "2"=`GP1`→Rt1→`TRACECLK`→J3-12; "4"/"5"/"6"/"7"=`GP2..GP5`→Rt2..Rt5→`TD0..TD3`→J3-14/16/18/20. Guards: JP2 (GP0↔GND), JP3 (GP6↔GND).
 - [ ] **Step 2: Failing test**
 
 ```python
@@ -222,7 +233,7 @@ def test_trace_nets():
         assert series_between(gp, td, rt), f"{rt} not in series {gp}->{td}"
         assert ("J3",pin) in net_pins(td)
     for probe in ("SWDIO","SWCLK"):
-        refs = {ref for ref,_ in net_pins(probe)}
+        refs = {r for r,_ in net_pins(probe)}
         assert {"J3","J4","J6","J7"} <= refs, f"{probe} not on all debug conns: {refs}"
     assert ("SW1","1") in net_pins("NRESET")
 ```
@@ -231,37 +242,39 @@ def test_trace_nets():
 
 ---
 
-### Task 6: Connectivity model — USB host, USB device, VBUS-detect taps
+### Task 6: USB host, USB device, VBUS-detect taps
 
-**Files:** Modify `hw/netlist.py`; `hw/checks.py::test_usb_nets`
+**Files:** Modify `hw/netlist.py`; `hw/checks.py::test_usb_nets`.
 
-**Interfaces:** Produces `HOST_DP,HOST_DM` (GP20/21), `DEV_DP,DEV_DM` (GP18/19), `NATIVE_VBUS_DET`(GP16), `DEV_VBUS_DET`(GP27), and their divider/pulldown/series/ESD parts.
+**Produces:** `HOST_DP,HOST_DM` (GP20/21), `DEV_DP,DEV_DM` (GP18/19), `NATIVE_VBUS_DET` (GP16), `DEV_VBUS_DET` (GP27), `J9_VBUS`, and the D+ gating FET wiring.
 
-- [ ] **Step 1:** Per `DESIGN.md` §8/§9: host J5 D+=GP20/D−=GP21 via 22 Ω series, 15 kΩ pulldowns, ESD; host VBUS from load switch (enable=GP17, fault=GP15). Device J9 D+=GP18/D−=GP19 via series, ESD, 1.5 kΩ D+ pull-up through gating FET controlled by `DEV_VBUS_DET`; J9 VBUS→8.2k/8.2k→GP27. Native tap: `VBUS_NET`→8.2k/8.2k→GP16 through JP4. Current-sense shunt in `HOST_VBUS`→INA181→GP26.
-- [ ] **Step 2: Failing test**
+- [ ] **Step 1:** Per `DESIGN.md` §8/§9: host J5 D+=GP20/D−=GP21 via 22 Ω, 15 kΩ pulldowns to GND, `ESD_H`; TP1/TP2/TP3 on `HOST_DP`/`HOST_DM`/`GND` (fixes G-3); host VBUS via `U_HSW` (EN=GP17, FLG=GP15). Device J9 D+=GP18/D−=GP19 via series, `ESD_D`; 1.5 kΩ D+ pull-up switched by `Q_DPU` gated on `DEV_VBUS_DET`; `J9_VBUS`→8.2k/8.2k→`DEV_VBUS_DET`(GP27). Native tap: `VBUS_NET`→JP4→8.2k/8.2k→`NATIVE_VBUS_DET`(GP16). Shunt `R_SHUNT` in `HOST_VBUS`→`U_ISNS`→`ISENSE`(GP26).
+- [ ] **Step 2: Failing test** (net names now consistent with `PINMAP`)
 
 ```python
 def test_usb_nets():
     from hw.netlist import net_pins, series_between, divider_ratio
-    assert divider_ratio("VBUS_NET","GP16") == (8200,8200)       # native detect tap
-    assert divider_ratio("J9_VBUS","GP27") == (8200,8200)        # device detect
-    assert series_between("GP20","HOST_DP_CONN", any_R=True)     # 22R series
-    assert ("R_PD_HDP","2") in net_pins("GND")                   # 15k pulldown to GND
-    assert ("U_HSW","EN") in net_pins("GP17") and ("U_HSW","FLG") in net_pins("GP15")
+    assert divider_ratio("VBUS_NET","NATIVE_VBUS_DET") == (8200,8200)   # via JP4
+    assert divider_ratio("J9_VBUS","DEV_VBUS_DET") == (8200,8200)
+    assert series_between("GP20","HOST_DP")                              # 22R series (any R)
+    assert ("U_HSW","EN") in net_pins("HOST_VBUS_EN") and ("U_HSW","FLG") in net_pins("HOST_VBUS_FLT")
+    assert {("TP1",_) for _ in [1]} & set() or ("TP1","1") in net_pins("HOST_DP")   # probe point present
+    assert ("Q_DPU","G") in net_pins("DEV_VBUS_DET")                     # gating FET controlled by detect
 ```
 
-- [ ] **Step 3:** run → fix. **Step 4:** commit `"netlist: USB host/device + VBUS-detect taps"`.
+- [ ] **Step 3:** run → fix. **Step 4:** commit `"netlist: USB host/device, VBUS-detect taps, probe points, D+ gate FET"`.
 
 ---
 
-### Task 7: Connectivity model — peripherals + full pin-map assertion
+### Task 7: Peripherals, breakout ties, full pin-map lock
 
-**Files:** Modify `hw/netlist.py`; `hw/checks.py::test_pinmap`
+**Files:** Modify `hw/netlist.py`; `hw/checks.py::{test_pinmap,test_breakout}`.
 
-**Interfaces:** Completes `NETS`. Produces the console/I2C/LED/button nets and a `PINMAP` derived from `PARTS["PICO"].pins`.
+**Produces:** console/I2C/LED/button nets; the **J1B/J2B breakout pin-for-pin ties** (fixes G-1); completed `PINMAP`.
 
-- [ ] **Step 1:** Per `DESIGN.md` §6/§10: UART0 GP12(TX)/GP13(RX)→J_UART; I2C0 GP8(SDA)/GP9(SCL)→STEMMA; user LED GP10→R→`GND`; power LED on `VBUS_NET`→R→`GND`; button SW... (SW1 is RUN); user button GP14→`GND`. Assert GP0/GP6=guards, GP1–5=trace, GP7/11/22/28=unused.
-- [ ] **Step 2: Failing test** — assert the entire `DESIGN.md` §6 map exactly:
+- [ ] **Step 1:** Per `DESIGN.md` §6/§10: UART0 GP12(TX)/GP13(RX)→`J_UART`; I2C0 GP8(SDA)/GP9(SCL)→`J_STEMMA`; user LED GP10→R→`GND`; user button GP14→`GND`; GP0/GP6=guards; GP7/11/22/28 breakout-only.
+- [ ] **Step 2: Breakout ties** — for `n` in 1..40: set `J1B` pad `n` **and** `J2B` pad `n` (whichever row that physical pin lands on) to the **same net as `PICO` pad `n`**. Implement as a loop over `PARTS["PICO"].pins`.
+- [ ] **Step 3: Failing tests**
 
 ```python
 def test_pinmap():
@@ -272,234 +285,248 @@ def test_pinmap():
               18:"DEV_DP",19:"DEV_DM",20:"HOST_DP",21:"HOST_DM",26:"ISENSE",27:"DEV_VBUS_DET"}
     for gp,fn in expect.items():
         assert PINMAP[gp]==fn, f"GP{gp}: {PINMAP.get(gp)} != {fn}"
+
+def test_breakout():
+    from hw.netlist import PARTS
+    pico=PARTS["PICO"].pins
+    for n in map(str,range(1,41)):
+        b = PARTS["J1B"].pins.get(n) or PARTS["J2B"].pins.get(n)
+        assert b == pico[n] and b is not None, f"breakout pad {n} not tied to PICO {n}"
 ```
 
-- [ ] **Step 3:** run → fix until the map matches `DESIGN.md` §6 exactly. **Step 4:** commit `"netlist: peripherals + pin-map lock"`.
+- [ ] **Step 4:** run → fix until both pass. **Step 5:** commit `"netlist: peripherals + breakout ties + pin-map lock"`.
 
 ---
 
 ### Task 8: Emit KiCad netlist + connectivity lint
 
-**Files:** Modify `hw/netlist.py` (`emit_netlist()`); `hw/checks.py::test_lint`; output `pico2_trace.net`
+**Files:** Modify `hw/netlist.py` (`emit_netlist`); `hw/checks.py::test_lint`; output `pico2_trace.net`.
 
-**Interfaces:** Produces `pico2_trace.net` (KiCad netlist s-expr) consumed by Tasks 9 (schematic/BOM) and 10 (PCB build).
-
-- [ ] **Step 1:** Implement `emit_netlist()` writing a KiCad `(export (version "E") (components…) (nets…))` file from `PARTS`/`NETS`.
-- [ ] **Step 2: Failing test** — lint the model:
+- [ ] **Step 1:** `emit_netlist(path)` writes `(export (version "E") (components…) (nets…))` from `PARTS`/`NETS`, skipping `dnp` parts' population but keeping refs.
+- [ ] **Step 2: Failing lint**
 
 ```python
 def test_lint():
-    from hw.netlist import PARTS, NETS, net_pins
-    for name,pins in NETS.items():                      # no single-pin nets
+    from hw.netlist import PARTS, NETS
+    for name,pins in NETS.items():
         assert len(pins) >= 2, f"net {name} has {len(pins)} pin(s)"
-    for ref,p in PARTS.items():                          # no floating pins (None) except documented NC
-        nc = getattr(p,"nc",set())
+    for ref,p in PARTS.items():
         for pad,net in p.pins.items():
-            assert net is not None or pad in nc, f"{ref}.{pad} unconnected"
+            assert net is not None or pad in p.nc, f"{ref}.{pad} unconnected (not in nc)"
 ```
 
-- [ ] **Step 3:** run → fix (mark true NC pins: MIPI-20 6/7/8, J8 D+/D−). **Step 4:**
-
-```bash
-python3 -c "import hw.netlist as n; n.emit_netlist('pico2_trace.net'); print('netlist written')"
-```
-Expected: `netlist written`; `grep -c '(net ' pico2_trace.net` > 30. **Step 5:** commit `"netlist: emit KiCad .net + connectivity lint"`.
+- [ ] **Step 3:** run → fix (mark true NC: MIPI-20 "6"/"7"/"8", J8 D+/D−). **Step 4:** `python3 -c "import hw.netlist as n; n.emit_netlist('pico2_trace.net')"` then `test $(grep -c '(net ' pico2_trace.net) -gt 30`. **Step 5:** commit `"netlist: emit .net + lint"`.
 
 ---
 
-### Task 9: Schematic (ERC-clean)
+### Task 9: Schematic (ERC-clean, netlist-matched)
 
-**Files:** Create `pico2_trace.kicad_sch` (+ hierarchical sheets `power/`, `debug_trace/`, `usb/`, `periph/`)
+**Files:** Create `pico2_trace.kicad_sch` (+ hierarchical sheets).
 
-**Interfaces:** Consumes `pico2_trace.net` + `PARTS`/`NETS`. Produces an ERC-clean schematic and the schematic PDF.
-
-- [ ] **Step 1 (SCHEMATIC_MODE=auto):** run the venv generator to emit `.kicad_sch` from the model; open-test with `kicad-cli sch export netlist` and confirm the exported netlist matches `pico2_trace.net` (same nets/pins). If it fails to open or mismatches → set `SCHEMATIC_MODE=gui` and continue at Step 2.
-- [ ] **Step 1 (SCHEMATIC_MODE=gui):** In eeschema draw four hierarchical sheets, one per net group (Tasks 4–7), using the symbols from `sym/pico2_trace.kicad_sym` + KiCad stock, following the Adafruit reference schematics for sub-circuits: `stemmaqt_shift.sch` (STEMMA-QT), `adafruit_power.lbr` (load switch), `adafruit_electromech.lbr` (button). Label nets with the exact `NETS` names so ERC/BOM cross-check against `pico2_trace.net`.
-- [ ] **Step 2: Run ERC**
-
-Run: `kicad-cli sch erc --exit-code-violations pico2_trace.kicad_sch; echo exit=$?`
-Expected: report with 0 errors (warnings for intentional NC allowed), `exit=0`.
-
-- [ ] **Step 3: Cross-check the schematic netlist equals the model**
+- [ ] **Step 1 (auto):** if `SCHEMATIC_MODE=auto`, run the venv SKiDL generator (`set_default_tool(KICAD9)`, `KICAD9_SYMBOL_DIR` set) to emit `.kicad_sch`; note it writes `./skidl.kicad_sch` and is flat — move/rename to `pico2_trace.kicad_sch`.
+- [ ] **Step 1 (gui):** if `SCHEMATIC_MODE=gui`, draw four hierarchical sheets in eeschema (power / debug_trace / usb / periph) using `sym/pico2_trace.kicad_sym` + stock symbols, following `stemmaqt_shift.sch`, `adafruit_power.lbr`, `adafruit_electromech.lbr`; label nets with exact `NETS` names.
+- [ ] **Step 2: ERC** — `kicad-cli sch erc --exit-code-violations pico2_trace.kicad_sch -o /tmp/erc.rpt; echo exit=$?` → report shows 0 errors (intentional-NC warnings OK).
+- [ ] **Step 3: Netlist parity (the authoritative cross-check, not pcb schematic-parity)**
 
 ```bash
-kicad-cli sch export netlist -o sch.net pico2_trace.kicad_sch
-python3 hw/checks.py --compare-netlists sch.net pico2_trace.net
+kicad-cli sch export netlist -o /tmp/sch.net pico2_trace.kicad_sch
+python3 hw/checks.py --compare-netlists /tmp/sch.net pico2_trace.net   # prints "netlists match" or the diff
 ```
-Expected: `netlists match` (same nodes per net).
+Expected: `netlists match`.
 
-- [ ] **Step 4: Export schematic PDF** — `kicad-cli sch export pdf -o docs/schematic.pdf pico2_trace.kicad_sch`
-- [ ] **Step 5: Commit** — `git commit -am "sch: ERC-clean schematic + PDF"`
+- [ ] **Step 4:** `kicad-cli sch export pdf -o docs/schematic.pdf pico2_trace.kicad_sch`. **Step 5:** commit `"sch: ERC-clean schematic matched to netlist + PDF"`.
 
 ---
 
-### Task 10: PCB — instantiate board from the model (stackup, nets, net classes)
+### Task 10: PCB — instantiate footprints, nets, net classes, stackup
 
-**Files:** Create `hw/build_board.py`; modify `pico2_trace.kicad_pcb`
+**Files:** Create `hw/build_board.py`.
 
-**Interfaces:** Consumes `PARTS`/`NETS` + `hw/fp_lib.py`. Produces a board with every footprint added, every net created and assigned to pads, a 2-layer stackup, and three net classes.
+- [ ] **Step 1:** `build_board.py`: `b=pcbnew.LoadBoard("pico2_trace.kicad_pcb"); assert b is not None`. For each non-DNP `PARTS` entry: `fp=pcbnew.FootprintLoad(dir, name); fp.SetReference(ref); b.Add(fp)`; create nets via `ni=pcbnew.NETINFO_ITEM(b,net); b.Add(ni)`; `pad.SetNet(...)` per `p.pins`. `b.SetCopperLayerCount(2)`. `pcbnew.SaveBoard(...)`.
+- [ ] **Step 2: Net classes (persisted via SaveProject, per BL-4)**
 
-- [ ] **Step 1:** `build_board.py` — for each `PARTS` entry: `board.Add(pcbnew.FOOTPRINT)` loaded from its lib, create/lookup `pcbnew.NETINFO_ITEM` per net, `pad.SetNet(...)` per `p.pins`. Set 2-layer copper (`board.SetCopperLayerCount(2)`).
-- [ ] **Step 2:** Add net classes via the board design settings: `Default` (0.25 mm / 0.2 mm clr), `Power` (0.5 mm) assigned to `GND,VBUS_NET,V5_JTRACE,VSYS,P3V3,HOST_VBUS`, `Trace` (0.3 mm / 0.25 mm clr) assigned to `TRACECLK,TD0..TD3`.
-- [ ] **Step 3: Verify** 
+```python
+ds = b.GetDesignSettings(); ns = ds.m_NetSettings
+def nc(name,w,c):
+    k=pcbnew.NETCLASS(name); k.SetTrackWidth(pcbnew.FromMM(w)); k.SetClearance(pcbnew.FromMM(c)); ns.SetNetclass(name,k)
+nc("Power",0.5,0.2); nc("Trace",0.3,0.25)
+for n in ["GND","VBUS_NET","V5_JTRACE","VSYS","P3V3","HOST_VBUS"]: ns.SetNetclassPatternAssignment(n,"Power")
+for n in ["TRACECLK","TD0","TD1","TD2","TD3"]: ns.SetNetclassPatternAssignment(n,"Trace")
+pcbnew.SaveBoard("pico2_trace.kicad_pcb", b)
+pcbnew.GetSettingsManager().SaveProject()      # <-- required or classes are lost
+```
+
+- [ ] **Step 3: Verify**
 
 ```bash
 python3 hw/build_board.py && python3 - <<'PY'
 import pcbnew
-b=pcbnew.LoadBoard("pico2_trace.kicad_pcb")
+b=pcbnew.LoadBoard("pico2_trace.kicad_pcb"); assert b
 fps={f.GetReference() for f in b.GetFootprints()}
-assert {"J1","J3","J5","J9","JP1","SW1"} <= fps, fps
-nc={n.GetName() for n in b.GetNetClasses()} if hasattr(b,'GetNetClasses') else set()
-print("footprints:",len(fps),"nets:",b.GetNetCount())
+assert {"PICO","J1B","J3","J5","J9","JP1","SW1","TP1"} <= fps, fps
+classes={str(k) for k in b.GetNetClasses()}        # wxString keys (BL-4b)
+print("footprints",len(fps),"nets",b.GetNetCount(),"classes",classes)
+assert "Trace" in classes and "Power" in classes
 PY
 ```
-Expected: all footprints present, net count matches `len(NETS)+1`.
-
-- [ ] **Step 4: DRC (unrouted allowed, connectivity only)** — `kicad-cli pcb drc pico2_trace.kicad_pcb` prints unconnected items = ratsnest (expected pre-routing). **Step 5:** commit `"pcb: instantiate footprints, nets, net classes, 2-layer stackup"`.
+Expected: footprints present, `GetNetCount()==len(NETS)+1`, classes include Trace+Power. **Step 4:** commit `"pcb: footprints, nets, net classes (persisted), 2-layer stackup"`.
 
 ---
 
-### Task 11: PCB — board outline, mounting, Pico socket edge
+### Task 11: PCB — board outline, mounting holes, Pico socket edge
 
-**Files:** Modify `hw/build_board.py` (outline section)
+**Files:** Modify `hw/build_board.py` (replace the Task-1 placeholder outline).
 
-**Interfaces:** Produces `Edge.Cuts` closed outline (~65 × 34 mm), 4× M3 mounting holes, Pico socket placed so its micro-USB + BOOTSEL overhang a board edge.
-
-- [ ] **Step 1:** Draw the rectangular `Edge_Cuts` outline + 3 mm corner radii + 4 mounting holes via `pcbnew.PCB_SHAPE`/`AddHole`. Place the Pico socket footprint (`PICO`) with the USB end at the board edge (leave a keepout notch so the module's USB/BOOTSEL clear).
-- [ ] **Step 2: Verify outline is closed**
+- [ ] **Step 1:** Redraw a ~65 × 34 mm `Edge_Cuts` outline (rounded corners); add 4× `MountingHole:MountingHole_3.2mm_M3` footprints (fixes BL-10 — no `AddHole`); place `PICO` with its USB/BOOTSEL end at a board edge (keepout notch so the module clears).
+- [ ] **Step 2: Verify outline closed + size**
 
 ```bash
 python3 - <<'PY'
 import pcbnew
-b=pcbnew.LoadBoard("pico2_trace.kicad_pcb")
-edges=[d for d in b.GetDrawings() if d.GetLayer()==pcbnew.Edge_Cuts]
-assert edges, "no edge cuts"
-bb=b.GetBoardEdgesBoundingBox(); print("board mm:", pcbnew.ToMM(bb.GetWidth()), pcbnew.ToMM(bb.GetHeight()))
+b=pcbnew.LoadBoard("pico2_trace.kicad_pcb"); assert b
+edges=[d for d in b.GetDrawings() if d.GetLayer()==pcbnew.Edge_Cuts]; assert edges,"no edge cuts"
+bb=b.GetBoardEdgesBoundingBox(); print("board mm:", round(pcbnew.ToMM(bb.GetWidth()),1), round(pcbnew.ToMM(bb.GetHeight()),1))
+assert {"MH1","MH2","MH3","MH4"} <= {f.GetReference() for f in b.GetFootprints()}
 PY
 ```
-Expected: prints board size ≈ 65 × 34 mm.
-
-- [ ] **Step 3:** commit `"pcb: board outline, mounting holes, Pico socket edge"`.
+Expected: ≈ 65 × 34 mm, 4 mounting holes. **Step 3:** commit `"pcb: outline, mounting holes, Pico socket edge"`.
 
 ---
 
-### Task 12: PCB — constrained placement
+### Task 12: PCB — constrained placement + trace silk
 
-**Files:** Create `hw/place.py` (placement coordinates table); modify `hw/build_board.py` to apply it
+**Files:** Create `hw/place.py`; modify `hw/build_board.py`.
 
-**Interfaces:** Consumes the board; produces deterministic XY/rotation for every footprint honoring the physical constraints.
-
-- [ ] **Step 1:** Encode placement in `hw/place.py` as `POS = {ref:(x_mm,y_mm,rot)}`: MIPI-20 (J3) within 30 mm of the Pico trace pins (2,4,5,6,7 side); J4/J6/J7 grouped with J3 on that edge; Rt1–Rt5 hard against the socket trace pins; JP2/JP3 guards flanking the trace pins; J5 (USB-A) + J8 (power) + J9 (device) on the opposite edge; STEMMA/UART/button/LED on the free edge; JP1 near the power pins; load switch + ESD by J5.
-- [ ] **Step 2: Apply + verify no courtyard overlaps**
+- [ ] **Step 1:** `POS = {ref:(x,y,rot)}`: J3 within 30 mm of PICO trace pins (2/4/5/6/7 side); J4/J6/J7 grouped on that edge; Rt1–Rt5 hard against the socket trace pins; JP2/JP3 flanking; J1B/J2B outboard of each socket row; J5/J8/J9 on the opposite edge (load switch + ESD by J5, TP1–3 at the port); J_STEMMA/J_UART/button/LED on the free edge; JP1 near the power pins.
+- [ ] **Step 2: Trace silk (fixes G-4)** — add `PCB_TEXT` "unplug while tracing" on the silk near the GP1–GP5 breakout pads.
+- [ ] **Step 3: Apply + verify no courtyard overlaps (JSON report, not stdout grep — fixes BL-2/BL-9)**
 
 ```bash
-python3 hw/build_board.py --place && kicad-cli pcb drc --schematic-parity=no pico2_trace.kicad_pcb 2>&1 | grep -iE 'courtyard|overlap' || echo "no courtyard errors"
+python3 hw/build_board.py --place
+kicad-cli pcb drc --format json -o /tmp/drc.json pico2_trace.kicad_pcb >/dev/null 2>&1
+python3 -c "import json;v=json.load(open('/tmp/drc.json'))['violations'];c=[x['type'] for x in v if x['type'] in('courtyards_overlap','holes_co_located')];print('placement violations:',c);assert not c"
 ```
-Expected: `no courtyard errors`.
+Expected: `placement violations: []`.
 
-- [ ] **Step 3: Verify trace-pin → MIPI-20 span < 30 mm**
+- [ ] **Step 4: Verify trace-pin → MIPI-20 span < 30 mm (EuclideanNorm — fixes BL-7)**
 
 ```bash
 python3 - <<'PY'
-import pcbnew,math
-b=pcbnew.LoadBoard("pico2_trace.kicad_pcb")
+import pcbnew
+b=pcbnew.LoadBoard("pico2_trace.kicad_pcb"); assert b
 def pad(ref,pn):
-    f=b.FindFootprintByReference(ref)
-    return next(p.GetPosition() for p in f.Pads() if p.GetNumber()==pn)
-d=pad("PICO","2").Distance(pad("J3","12"))  # socket TRACECLK pin to MIPI-20 pin 12
-print("CLK span mm:", pcbnew.ToMM(d)); assert pcbnew.ToMM(d) < 30
+    f=b.FindFootprintByReference(ref); return next(p.GetPosition() for p in f.Pads() if p.GetNumber()==pn)
+d=pcbnew.ToMM((pad("PICO","2")-pad("J3","12")).EuclideanNorm())
+print("CLK span mm:", round(d,1)); assert d < 30
 PY
 ```
-Expected: span < 30 mm. **Step 4:** commit `"pcb: constrained placement (trace <30mm, debug edge, USB edge)"`.
+Expected: span < 30 mm. **Step 5:** commit `"pcb: constrained placement + trace silk"`.
 
 ---
 
 ### Task 13: PCB — route the SI-critical nets
 
-**Files:** Create `hw/route_trace.py`
+**Files:** Create `hw/route_trace.py`.
 
-**Interfaces:** Consumes the placed board; routes TRACECLK+TD0–TD3 (through Rt at the socket), SWDIO/SWCLK, NRESET, VTREF on the top layer.
-
-- [ ] **Step 1:** In `route_trace.py`, route each trace net as a short top-layer polyline socket-pin → Rt pad → MIPI-20 pad using `pcbnew.PCB_TRACK` on `Trace` net class; keep the five runs parallel and equalize lengths (pad extra length with a small trombone if needed). Route SWD/nRESET/VTref to J3+J6.
-- [ ] **Step 2: Verify lengths matched + on-layer**
+- [ ] **Step 1:** Route TRACECLK+TD0–TD3 as short top-layer `PCB_TRACK` runs socket-pin → Rt → MIPI-20 on the `Trace` class; keep parallel + length-equalized (small trombone if needed). Route SWDIO/SWCLK/NRESET/VTREF to J3+J6. `SaveBoard`.
+- [ ] **Step 2: Verify matched + short**
 
 ```bash
 python3 - <<'PY'
 import pcbnew
-b=pcbnew.LoadBoard("pico2_trace.kicad_pcb")
+b=pcbnew.LoadBoard("pico2_trace.kicad_pcb"); assert b
 def length(net):
     nc=b.GetNetcodeFromNetname(net)
     return pcbnew.ToMM(sum(t.GetLength() for t in b.GetTracks() if t.GetNetCode()==nc))
-L={n:length(n) for n in ["TRACECLK","TD0","TD1","TD2","TD3"]}
-print(L); assert max(L.values())-min(L.values()) < 3, "CLK/data mismatch >3mm"
-assert all(v<30 for v in L.values())
+L={n:round(length(n),1) for n in ["TRACECLK","TD0","TD1","TD2","TD3"]}
+print(L); assert max(L.values())-min(L.values())<3 and all(v<30 for v in L.values())
 PY
 ```
-Expected: all < 30 mm, spread < 3 mm. **Step 3:** commit `"pcb: route length-matched trace bundle + SWD"`.
+Expected: all < 30 mm, spread < 3 mm. **Step 3:** commit `"pcb: length-matched trace bundle + SWD"`.
 
 ---
 
-### Task 14: PCB — route power + USB pairs + guards
+### Task 14: PCB — route power, USB pairs, guards, and finish bulk nets
 
-**Files:** Modify `hw/route_trace.py` (power/USB section)
+**Files:** Modify `hw/route_trace.py`.
 
-**Interfaces:** Routes VBUS_NET/HOST_VBUS/VSYS/P3V3 (Power class), the host+device D± pairs (short, with series R + ESD + pulldowns adjacent), guards GP0/GP6 to GND.
-
-- [ ] **Step 1:** Route power nets on top (wide, Power class); route each USB D± pair tightly coupled from the GPIO series R → ESD → receptacle; connect JP2/JP3 guard pins to the GND pour.
-- [ ] **Step 2: Verify ratsnest reduced to bulk signals only**
+- [ ] **Step 1:** Route power nets (Power class, wide); route each USB D± pair tightly coupled GPIO-series-R → ESD → receptacle; tie JP2/JP3 guard pins to `GND`. `SaveBoard`.
+- [ ] **Step 2: Interactive finish (the one non-scripted step, done here BEFORE the DRC gate — fixes BL-3 ordering)** — in pcbnew GUI (or Freerouting via exported `.dsn`) route the remaining low-speed peripheral nets (I2C, UART, LED, button, ISENSE) and the breakout rows. Record it in `docs/BRINGUP.md`.
+- [ ] **Step 3: Verify unconnected count trends to zero (arg required — fixes BL-8)**
 
 ```bash
 python3 - <<'PY'
 import pcbnew
-b=pcbnew.LoadBoard("pico2_trace.kicad_pcb"); b.BuildConnectivity()
-un=b.GetConnectivity().GetUnconnectedCount()
-print("unconnected pads:", un)   # remaining = bulk periph nets for GUI/Freerouting finish
+b=pcbnew.LoadBoard("pico2_trace.kicad_pcb"); assert b; b.BuildConnectivity()
+un=b.GetConnectivity().GetUnconnectedCount(False)
+print("unconnected pads:", un)
 PY
 ```
-Expected: prints a small count (trace/power/USB done; note remaining for interactive finish). **Step 3:** commit `"pcb: route power, USB pairs, guards"`.
-
-- [ ] **Step 4 (interactive finish, documented):** In pcbnew GUI (or Freerouting via exported `.dsn`) route the remaining low-speed peripheral nets (I2C, UART, LED, button, current-sense). This is the one non-scripted step — the SI-critical work is already done and locked. Record it in `docs/BRINGUP.md`.
+Expected: `0` after Step 2 (or a listed remainder you consciously defer). **Step 4:** commit `"pcb: route power, USB pairs, guards; finish bulk nets"`.
 
 ---
 
 ### Task 15: PCB — bottom ground pour + stitching
 
-**Files:** Modify `hw/route_trace.py` (zone section)
+**Files:** Modify `hw/route_trace.py`.
 
-**Interfaces:** Produces a bottom-layer `GND` zone (whole board) + top `GND` fill + stitching vias under/around the trace group.
+- [ ] **Step 1 (fill only on a file-loaded board — fixes FR-1 segfault):**
 
-- [ ] **Step 1:** Add a `pcbnew.ZONE` on B.Cu tied to `GND` covering the board; add a top-layer GND fill; add a grid of GND stitching vias in the trace region; `pcbnew.ZONE_FILLER(b).Fill(...)`.
-- [ ] **Step 2: Verify GND is one connected pour under the trace**
+```python
+import pcbnew
+b=pcbnew.LoadBoard("pico2_trace.kicad_pcb"); assert b     # MUST be loaded from disk, not in-memory
+gnd=b.GetNetcodeFromNetname("GND")
+for layer in (pcbnew.B_Cu, pcbnew.F_Cu):
+    z=pcbnew.ZONE(b); z.SetLayer(layer); z.SetNet(b.FindNet(gnd))
+    z.SetOutline(<board_outline_polygon>); b.Add(z)
+# add GND stitching vias in the trace region here
+pcbnew.ZONE_FILLER(b).Fill(b.Zones())
+pcbnew.SaveBoard("pico2_trace.kicad_pcb", b)
+```
+
+- [ ] **Step 2: Verify bottom GND filled**
 
 ```bash
 python3 - <<'PY'
 import pcbnew
-b=pcbnew.LoadBoard("pico2_trace.kicad_pcb")
+b=pcbnew.LoadBoard("pico2_trace.kicad_pcb"); assert b
 z=[z for z in b.Zones() if z.GetNetname()=="GND" and z.GetLayer()==pcbnew.B_Cu]
 assert z and z[0].GetFilledArea()>0, "bottom GND not filled"
-print("bottom GND filled area mm2:", pcbnew.ToMM(pcbnew.ToMM(z[0].GetFilledArea())))
+print("bottom GND filled mm2:", round(pcbnew.ToMM(pcbnew.ToMM(z[0].GetFilledArea())),1))  # double-ToMM = area in mm^2
 PY
 ```
-Expected: nonzero filled area. **Step 3:** commit `"pcb: bottom GND pour + stitching vias"`.
+Expected: nonzero area. **Step 3:** commit `"pcb: bottom GND pour + stitching vias"`.
 
 ---
 
-### Task 16: Full DRC clean
+### Task 16: Full DRC gate (JSON-parsed, error-severity)
 
-**Files:** none (verification + fixes in `hw/route_trace.py`/`place.py`)
+**Files:** `hw/checks.py::drc_gate`.
 
-- [ ] **Step 1: Run DRC**
+- [ ] **Step 1: Run DRC to JSON and gate in Python (never exit-code/stdout — fixes BL-3/BL-5)**
 
-Run: `kicad-cli pcb drc --schematic-parity=yes --exit-code-violations pico2_trace.kicad_pcb -o docs/drc.rpt; echo exit=$?`
-Expected: `exit=0` (0 violations). Any remaining unconnected items must be only the documented Task-14 interactive nets — otherwise fix and re-run.
+```bash
+kicad-cli pcb drc --format json -o docs/drc.json pico2_trace.kicad_pcb >/dev/null 2>&1
+python3 - <<'PY'
+import json
+v=json.load(open("docs/drc.json"))
+errs=[x for x in v["violations"] if x.get("severity")=="error"]
+un=v.get("unconnected_items",[])
+print("errors:",len(errs),"unconnected:",len(un))
+for x in errs[:20]: print(" -",x["type"],x.get("description",""))
+assert not errs and not un, "DRC not clean"
+print("DRC CLEAN")
+PY
+```
+Expected: `DRC CLEAN`. Warnings are reviewed and either fixed or explicitly waived in `docs/BRINGUP.md`; **parity is advisory** (Task 9's netlist compare is the real check).
 
-- [ ] **Step 2:** If violations exist, fix in the placement/route scripts and re-run until clean. **Step 3:** commit `"pcb: DRC clean"`.
+- [ ] **Step 2:** fix any errors in `place.py`/`route_trace.py`, re-run. **Step 3:** commit `"pcb: DRC clean"`.
 
 ---
 
 ### Task 17: Fabrication outputs, BOM, 3D render, bring-up note
 
-**Files:** Create `docs/BOM.csv`, `docs/BRINGUP.md`, `fab/*`, `docs/board.png`
+**Files:** `docs/BOM.csv`, `docs/BRINGUP.md`, `fab/*`, `docs/board.png`.
 
 - [ ] **Step 1: Gerbers + drill + position**
 
@@ -508,17 +535,17 @@ kicad-cli pcb export gerbers -o fab/ pico2_trace.kicad_pcb
 kicad-cli pcb export drill   -o fab/ pico2_trace.kicad_pcb
 kicad-cli pcb export pos -o fab/pos.csv --format csv --units mm pico2_trace.kicad_pcb
 ```
-Expected: `fab/` populated with `.gbr`/`.drl`/`pos.csv`.
+Expected: `fab/` has `.gbr`/`.drl`/`pos.csv`.
 
-- [ ] **Step 2: BOM** — `kicad-cli sch export bom -o docs/BOM.csv pico2_trace.kicad_sch` (or from the model if `SCHEMATIC_MODE=gui` produced no grouped BOM: generate from `PARTS`).
+- [ ] **Step 2: BOM** — `kicad-cli sch export bom -o docs/BOM.csv pico2_trace.kicad_sch` (auto mode) or generate from `PARTS` (gui mode); mark DNP parts DNP.
 - [ ] **Step 3: 3D render** — `kicad-cli pcb render -o docs/board.png --side top --quality high pico2_trace.kicad_pcb`
-- [ ] **Step 4: Bring-up note** — write `docs/BRINGUP.md`: power-up order, JP1/JP2/JP3/JP4 default states, the §9 native-VBUS-detect test recipe, the trace validation ladder (`DESIGN.md` §13), and the Task-14 interactive-routing record.
-- [ ] **Step 5: Archive** — copy `docs/schematic.pdf` + `docs/BRINGUP.md` to the calibre library. **Step 6:** commit `"fab: gerbers, drill, pos, BOM, 3D render, bring-up note"`.
+- [ ] **Step 4: Bring-up note** — write `docs/BRINGUP.md`: `## Toolchain` (Task-1 result), power-up order, JP1–JP4 defaults, the §9 native-VBUS-detect test recipe, the trace validation ladder (`DESIGN.md` §13), and the Task-14 interactive-routing record.
+- [ ] **Step 5:** archive `docs/schematic.pdf` + `docs/BRINGUP.md` to the calibre library. **Step 6:** commit `"fab: gerbers, drill, pos, BOM, 3D render, bring-up note"`.
 
 ---
 
 ## Self-review notes (author)
 
-- **Spec coverage:** every `DESIGN.md` section maps to a task — §3 form factor→T11/12, §4 connectors→T2/3, §5 trace→T5/13, §6 pin map→T7, §7 power→T4/14, §8 USB→T6/14, §9 native VBUS-detect tap→T6, §10 peripherals→T7/14, §11 BSP→(firmware, out of PCB scope; captured in BRINGUP), §12 deliverables→T17, §13 validation→BRINGUP, §14 DNP→T3 (marked DNP in PARTS).
-- **Known non-automated step:** Task 14 Step 4 (bulk low-speed routing) and, if the Task-1 spike fails, Task 9 schematic drawing are interactive KiCad-GUI steps — flagged explicitly, with everything SI-critical scripted and verified.
-- **Ordering:** netlist (T3–8) is the single source; schematic (T9) and PCB (T10–16) both derive from it and are cross-checked against `pico2_trace.net`.
+- **Review fixes folded in:** BL-1 (PICO=Module footprint, no separate inner sockets) · BL-2/BL-9 (DRC via parsed JSON, not stdout grep / bad flag) · BL-3/BL-5 (DRC gate = JSON error-severity + unconnected, interactive finish before the gate, placeholder outline) · BL-4 (`SaveProject()` + `{str(k) …}`) · BL-6/FR-3 (SKiDL spike uses `kinet2pcb`/`kinparse`, `KICAD9`, actually calls `generate_schematic`) · BL-7 (`EuclideanNorm`) · BL-8 (`GetUnconnectedCount(False)`) · BL-10 (MountingHole footprints) · FR-1 (fill only on file-loaded board) · FR-4 (helpers defined in Task 3, consistent signatures) · FR-6 (`hw/__init__.py`). Gaps: G-1 (breakout ties, Task 7 Step 2) · G-2 (pins 35/37) · G-3 (probe TPs) · G-4 (trace silk) · G-5 (D+ gate FET fp) · G-6 (J_UART/J_STEMMA refs) · G-7 (DNP parts enumerated).
+- **Spec coverage:** §3→T2/11/12, §4→T2/3, §5→T5/13, §6→T7, §7→T4/14, §8→T6/14, §9→T6, §10→T7/14, §11 BSP→BRINGUP (firmware, out of PCB scope), §12→T17, §13→BRINGUP, §14→T3 (DNP parts).
+- **Known non-automated steps:** Task 14 Step 2 (bulk low-speed routing) and, if the Task-1 spike fails, Task 9 gui schematic draw — both flagged; all SI-critical work is scripted and verified first.
