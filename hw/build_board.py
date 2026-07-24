@@ -16,6 +16,7 @@ if __name__ == "__main__":
 
 import pcbnew
 
+from hw import place
 from hw.fp_lib import FP
 from hw.netlist import NETS, PARTS
 
@@ -24,8 +25,14 @@ SYSTEM_FP_ROOT = "/usr/share/kicad/footprints"
 PROJECT_FP_DIR = "pico2_trace.pretty"
 
 # Task 11: board outline + mounting holes + Pico socket edge placement.
-BOARD_W_MM = 65.0
-BOARD_H_MM = 34.0
+# Task 12: grown from the Task-11 65x34 placeholder -- 65x34 has no room for
+# the 47 remaining footprints (5 trace resistors, two 1x20 breakout rows, the
+# 4-connector debug group, the USB-host/device clusters, ...) once J1B/J2B
+# and the debug connectors need real outboard space below/above the Pico
+# header rows. hw/place.py's POS table was derived against this exact size
+# (see its module docstring) -- re-derive POS if this changes.
+BOARD_W_MM = 110.0
+BOARD_H_MM = 78.0
 CORNER_R_MM = 3.0
 
 # 4x M3 mounting holes, inset ~4 mm from each edge/corner (netless).
@@ -290,7 +297,7 @@ def _place_pico(fps: dict) -> None:
     fp.SetPosition(_mm(dx, dy))
 
 
-def main() -> None:
+def main(do_place: bool = False) -> None:
     b = pcbnew.LoadBoard(BOARD_FILE)
     assert b is not None, f"LoadBoard({BOARD_FILE!r}) returned None"
 
@@ -302,14 +309,23 @@ def main() -> None:
     _place_pico(fps)
     _draw_outline(b)
 
+    # Task 12: constrained placement of the other 47 footprints + trace
+    # silk. Gated behind --place (rather than always-on) so a plain
+    # `python3 hw/build_board.py` still reproduces the Task-10/11 board
+    # (footprints/nets/outline/mounting holes/PICO placement only), matching
+    # the brief's explicit `--place` invocation.
+    if do_place:
+        place.apply(b)
+        place.add_trace_silk(b)
+
     b.SetCopperLayerCount(2)
     _set_net_classes(b)
 
     pcbnew.SaveBoard(BOARD_FILE, b)
     pcbnew.GetSettingsManager().SaveProject()  # required or net classes are lost
 
-    print(f"footprints={len(fps)} nets={len(nets)}")
+    print(f"footprints={len(fps)} nets={len(nets)} placed={do_place}")
 
 
 if __name__ == "__main__":
-    main()
+    main(do_place="--place" in sys.argv)
