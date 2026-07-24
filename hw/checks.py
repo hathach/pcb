@@ -72,6 +72,15 @@ def test_pinmap():
     assert PARTS["PICO"].pins["1"] != PARTS["PICO"].pins["9"]
 
 
+def test_lint():
+    from hw.netlist import PARTS, NETS
+    for name, pins in NETS.items():
+        assert len(pins) >= 2, f"net {name} has {len(pins)} pin(s)"
+    for ref, p in PARTS.items():
+        for pad, net in p.pins.items():
+            assert net is not None or pad in p.nc, f"{ref}.{pad} unconnected (not in nc)"
+
+
 def test_breakout():
     # NOTE (controller ruling, corrects the brief): the brief's snippet
     # (`J1B.pins.get(n) or J2B.pins.get(n)` over "1".."40") can't work -- J1B

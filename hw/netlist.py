@@ -475,6 +475,37 @@ for _pico_pad, _net in PARTS["PICO"].pins.items():
 
 
 # --------------------------------------------------------------------------
+# Task 8: connectivity lint -- nc entries + wiring fixes found by test_lint
+# --------------------------------------------------------------------------
+# J8 (DESIGN SS7 table: "power-only (VBUS+GND; D+/D- NC)"): D-/D+/ID are
+# genuinely unused on this power-only micro-B -- no-connect, not a bug.
+PARTS["J8"].nc |= {"2", "3", "4"}
+
+# J8 shield (pad 6, per the Task-3 comment "6 shield"): wiring bug, not a
+# legitimate nc. J9 is the same usb_microb footprint and Task 6 already ties
+# its shield pad to GND (PARTS["J9"].pins["6"] = "GND"); J8 never got the
+# matching tie in Task 4. Fixed here for consistency instead of nc'ing it.
+PARTS["J8"].pins["6"] = "GND"
+
+# J9 ID (DESIGN SS8.2: self-powered, detect-only device port -- no OTG role
+# for this connector): genuinely unused, no-connect.
+PARTS["J9"].nc |= {"4"}
+
+# J_TRACE_TP (DNP, DESIGN SS14: "optional DNP 1x6 100-mil test header on the
+# five trace nets" + GND to fill the 1x6): Task 3 added the part but never
+# wired it, leaving all 6 pads bare -- a wiring bug, not a legitimate nc
+# (nothing in DESIGN marks this header's pins as intentionally unused).
+# Wired here following the same precedent as D_J9_BUSPWR: an optional DNP
+# part still gets real net assignments to document what it's for; the `dnp`
+# flag alone (not nc) is what keeps it out of the bridging helpers and out of
+# emit_netlist's output. Pin order is arbitrary (generic header, no datasheet
+# constraint): trace bus order, GND last.
+PARTS["J_TRACE_TP"].pins.update({
+    "1": "TRACECLK", "2": "TD0", "3": "TD1", "4": "TD2", "5": "TD3", "6": "GND",
+})
+
+
+# --------------------------------------------------------------------------
 # Derived: NETS / net_pins
 # --------------------------------------------------------------------------
 
@@ -682,3 +713,51 @@ class _PinMapView(Mapping):
 
 
 PINMAP = _PinMapView()
+
+
+# --------------------------------------------------------------------------
+# Task 8: emit_netlist -- KiCad-style netlist export for the schematic
+# cross-check (Task 9 compares this against `kicad-cli sch export netlist`)
+# --------------------------------------------------------------------------
+
+def emit_netlist(path: str) -> None:
+    """Write a KiCad E-format s-expression netlist derived from PARTS/NETS.
+
+    DNP parts are excluded entirely: no `(comp ...)` entry, and no `(node
+    ...)` on any net -- they're never populated on the board, so they don't
+    electrically exist this rev (their refs stay reserved in PARTS). Pin
+    numbers are footprint pad numbers: each logical pin name is translated
+    through the part's padmap (identity if the part has none).
+    """
+    populated = {ref: p for ref, p in PARTS.items() if not p.dnp}
+
+    lines = ['(export (version "E")']
+
+    lines.append("  (components")
+    for ref in sorted(populated):
+        p = populated[ref]
+        lib, fp = FP[p.fp_class]
+        lines.append(f'    (comp (ref {ref}) (value "{p.value}") (footprint {lib}:{fp}))')
+    lines.append("  )")
+
+    lines.append("  (nets")
+    code = 0
+    for name in sorted(NETS):
+        nodes = sorted(
+            (ref, populated[ref].pad_number(pad))
+            for ref, pad in NETS[name]
+            if ref in populated
+        )
+        if not nodes:
+            continue  # net touches only DNP parts -- nothing to emit
+        code += 1
+        lines.append(f'    (net (code {code}) (name "{name}")')
+        for ref, pad_no in nodes:
+            lines.append(f"      (node (ref {ref}) (pin {pad_no}))")
+        lines.append("    )")
+    lines.append("  )")
+
+    lines.append(")")
+
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n")
