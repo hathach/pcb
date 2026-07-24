@@ -154,6 +154,9 @@ _add(Part(
 for _ref in ("Rt1", "Rt2", "Rt3", "Rt4", "Rt5"):
     _add(Part(_ref, "27", "r0402", _pins("1", "2")))
 
+# --- Reset debounce cap (100n, DNP per DESIGN "Reset") ----------------------
+_add(Part("C_NRESET", "100n", "c0402", _pins("1", "2"), dnp=True))
+
 # --- USB D+/D- series resistors (22R) --------------------------------------
 _add(Part("R_HDP", "22", "r0402", _pins("1", "2")))   # host D+ series (GP20 -> HOST_DP)
 _add(Part("R_HDM", "22", "r0402", _pins("1", "2")))   # host D- series (GP21 -> HOST_DM)
@@ -250,6 +253,57 @@ PARTS["SW1"].pins["2"] = "GND"         # RESET button: 1->NRESET (Task 5), 2->GN
 # pad2=A/anode) -- keep LED_USER (Task 7) consistent with this convention.
 PARTS["R_LED_PWR"].pins.update({"1": "VBUS_SEL", "2": "LED_PWR_A"})
 PARTS["LED_PWR"].pins.update({"2": "LED_PWR_A", "1": "GND"})
+
+
+# --------------------------------------------------------------------------
+# Task 5: debug & trace nets
+# --------------------------------------------------------------------------
+# VTREF ruling: there is no separate "VTREF" net -- PICO "36" is already on
+# P3V3 (Task 4). J3/J6 pin 1 (VTref) just join that same net.
+PARTS["J3"].pins["1"] = "P3V3"
+PARTS["J6"].pins["1"] = "P3V3"
+
+# SWD fan-out (DESIGN SS5.1-5.3): J4/J7 (SWCLK/GND/SWDIO, GND done in Task 4)
+# and J3/J6 pins 2/4 all share the SWDIO/SWCLK nets.
+PARTS["J4"].pins.update({"1": "SWCLK", "3": "SWDIO"})
+PARTS["J7"].pins.update({"1": "SWCLK", "3": "SWDIO"})
+PARTS["J3"].pins.update({"2": "SWDIO", "4": "SWCLK"})
+PARTS["J6"].pins.update({"2": "SWDIO", "4": "SWCLK"})
+
+# J6 grounds deferred from Task 4 (ruling): pins 3/5/9 -> GND.
+PARTS["J6"].pins.update({"3": "GND", "5": "GND", "9": "GND"})
+
+# NRESET (DESIGN SS5.1/5.2: nRESET = RUN, pin 30): PICO -> J3/J6 pin 10 ->
+# SW1 side 1; SW1 side 2 -> GND (Task 4). Debounce cap across SW1.
+PARTS["PICO"].pins["30"] = "NRESET"
+PARTS["J3"].pins["10"] = "NRESET"
+PARTS["J6"].pins["10"] = "NRESET"
+PARTS["SW1"].pins["1"] = "NRESET"
+PARTS["C_NRESET"].pins.update({"1": "NRESET", "2": "GND"})
+
+# SWO/KEY/TDI: RP2350 has no SWO, KEY/TDI are unused on this bus -- NC on
+# both debug connectors (DESIGN SS5.1/5.2, pins 6/7/8).
+PARTS["J3"].nc |= {"6", "7", "8"}
+PARTS["J6"].nc |= {"6", "7", "8"}
+
+# Trace chain (DESIGN SS5.1/5.4): PICO GPn -> Rtn (27R source series,
+# fitted at the socket pin) -> function net -> J3. GPn stays a bare net on
+# the PICO/socket side per the module net-naming convention.
+PARTS["PICO"].pins.update({"2": "GP1", "4": "GP2", "5": "GP3", "6": "GP4", "7": "GP5"})
+PARTS["Rt1"].pins.update({"1": "GP1", "2": "TRACECLK"})
+PARTS["Rt2"].pins.update({"1": "GP2", "2": "TD0"})
+PARTS["Rt3"].pins.update({"1": "GP3", "2": "TD1"})
+PARTS["Rt4"].pins.update({"1": "GP4", "2": "TD2"})
+PARTS["Rt5"].pins.update({"1": "GP5", "2": "TD3"})
+PARTS["J3"].pins.update({"12": "TRACECLK", "14": "TD0", "16": "TD1", "18": "TD2", "20": "TD3"})
+
+# Guard pins (DESIGN SS5.4/SS6): GP0 (pin 1) / GP6 (pin 9) each get a 2-pin
+# jumper straight to GND (default fitted). GPn *is* the function node here
+# (no series element to a differently-named net), per the guard-net case in
+# the module docstring.
+PARTS["PICO"].pins.update({"1": "GP0", "9": "GP6"})
+PARTS["JP2"].pins.update({"1": "GP0", "2": "GND"})
+PARTS["JP3"].pins.update({"1": "GP6", "2": "GND"})
 
 
 # --------------------------------------------------------------------------
