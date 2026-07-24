@@ -10,25 +10,37 @@ Net-naming convention relied on by PINMAP / divider_ratio / series_between
 rediscover it):
   - A "net" is a single Python string; two Part pins sharing that string are
     the same electrical node. Anything separated by a component (a resistor,
-    a jumper, ...) needs a *different* net name on each side.
+    a jumper, ...) needs a *different* net name on each side. This holds even
+    when PINMAP reports the same *label* for two pins: GP0's and GP6's guard
+    jumpers (JP2/JP3) are electrically independent, so their nets must never
+    share a literal string, even though both are labeled "GUARD" (below).
   - For a GPIO that reaches its function through a single source-series
     element (Rt1-5 for the trace bus, the 22R USB series resistors, the LED
     series resistors), PICO's own pin keeps a bare "GPn" net; the *far* side
     of that element carries the function name (e.g. "GP1" -Rt1-> "TRACECLK",
     "GP20" -R_HDP-> "HOST_DP"). PINMAP hops through that element to report
     the function name for the GPIO.
-  - For a GPIO that *is itself* the function node -- guard pins tied straight
-    to GND through a fitted jumper, or a resistor-divider midpoint (ISENSE,
-    NATIVE_VBUS_DET, DEV_VBUS_DET, HOST_VBUS_EN/FLT, I2C/UART/button pins) --
-    PICO's own pin should be named with the function directly (e.g. "GUARD",
-    "NATIVE_VBUS_DET"). PINMAP only hops when exactly one 2-pin
-    resistor/jumper touches the net and the far side isn't GND, so divider
-    midpoints (which have two such neighbors: the top leg and the GND leg)
-    and guard nets (whose one neighbor *is* GND) are correctly left alone.
+  - Guard pins (GP0/GP6) are the same source-series shape with GND on the far
+    side: PICO's own pin keeps a bare "GPn" net (distinct per pin) and a
+    fitted 2-pin jumper (JP2/JP3) goes straight to GND. Since "GND" isn't a
+    function name, PINMAP derives the literal label "GUARD" for this shape
+    instead of hopping to it.
+  - For a GPIO that *is itself* the function node -- a resistor-divider
+    midpoint (ISENSE, NATIVE_VBUS_DET, DEV_VBUS_DET), or a pin with no series
+    element at all (HOST_VBUS_EN/FLT, I2C/UART/button pins, DEV_DP_PU_EN) --
+    PICO's own pin should be named with the function directly (e.g.
+    "NATIVE_VBUS_DET"). PINMAP only ever hops (source-series or guard) when
+    the PICO-side net itself is a bare "GPn"-style name; that keeps divider
+    midpoints (two hop-class neighbors: top leg + GND leg) out of the
+    one-neighbor hop path, and stops a named function net from hopping just
+    because a resistor happens to be its only neighbor (e.g. DEV_DP_PU_EN
+    must NOT hop to "DEV_DP" through R_DPU -- R_DPU is a pull-up, not a
+    source-series element on DEV_DP_PU_EN's own GPIO).
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
@@ -295,16 +307,20 @@ PARTS["Rt4"].pins.update({"1": "GP4", "2": "TD2"})
 PARTS["Rt5"].pins.update({"1": "GP5", "2": "TD3"})
 PARTS["J3"].pins.update({"12": "TRACECLK", "14": "TD0", "16": "TD1", "18": "TD2", "20": "TD3"})
 
-# Guard pins (DESIGN SS5.4/SS6): GP0 (pin 1) / GP6 (pin 9) each get a 2-pin
-# jumper straight to GND (default fitted). GPn *is* the function node here
-# (no series element to a differently-named net), per the guard-net case in
-# the module docstring -- so the net itself must be named with the function
-# ("GUARD"), not the bare "GPn" the source-series case uses. (Task 7 fix:
-# these were originally named "GP0"/"GP6", which left PINMAP reporting the
-# raw GPIO name instead of "GUARD" -- caught by test_pinmap.)
-PARTS["PICO"].pins.update({"1": "GUARD", "9": "GUARD"})
-PARTS["JP2"].pins.update({"1": "GUARD", "2": "GND"})
-PARTS["JP3"].pins.update({"1": "GUARD", "2": "GND"})
+# Guard pins (DESIGN SS5.4/SS6): GP0 (pin 1) / GP6 (pin 9) each get their own
+# 2-pin jumper straight to GND (JP2/JP3, default fitted). These are two
+# independent guard nodes -- one net name = one electrical net, so they must
+# NOT share a literal string (review fix: an earlier pass renamed both to the
+# literal "GUARD", which shorts GP0 to GP6 in the model; with a jumper
+# removed, its pin must stay an independent breakout, per DESIGN SS5.4).
+# PICO keeps a bare "GPn" net on each guard pin (same shape as the
+# source-series convention, GND on the far side instead of a function net);
+# PINMAP's hop heuristic derives the literal "GUARD" label for this shape
+# (single fitted jumper neighbor landing on GND) instead of the net name
+# itself having to carry it.
+PARTS["PICO"].pins.update({"1": "GP0", "9": "GP6"})
+PARTS["JP2"].pins.update({"1": "GP0", "2": "GND"})
+PARTS["JP3"].pins.update({"1": "GP6", "2": "GND"})
 
 
 # --------------------------------------------------------------------------
@@ -606,11 +622,25 @@ _PICO_GPIO_PAD: dict[str, int] = {
 
 _HOP_CLASSES = _RESISTOR_CLASSES | _JUMPER_CLASSES
 
+# Bare "GPn"-style net name -- see the module docstring: PINMAP only ever
+# hops (source-series or guard) when the PICO-side net itself looks like
+# this, never for a named function net (e.g. DEV_DP_PU_EN) that merely
+# happens to have a single resistor/jumper neighbor.
+_BARE_GPIO_RE = re.compile(r"^GP\d+$")
+
 
 def _hop_label(net: str) -> str:
     """See the module docstring's net-naming convention: hop through a single
-    2-pin resistor/fitted-jumper touching `net` (unless it lands on GND, or
-    there's more than one such neighbor -- a divider midpoint has two)."""
+    2-pin resistor/fitted-jumper touching `net`, but only when `net` is a bare
+    "GPn"-style name. A single neighbor that isn't GND reports the far side's
+    function name (GP1 -Rt1-> TRACECLK). A single *jumper* neighbor that *is*
+    GND reports the literal "GUARD" label (GP0/GP6 via JP2/JP3) -- GND isn't a
+    function name, so the label has to be derived rather than hopped-to.
+    Anything else (zero neighbors, more than one -- a divider midpoint has a
+    top leg + a GND leg -- a non-jumper landing on GND, or `net` not being a
+    bare GPn) leaves the net name unchanged."""
+    if not _BARE_GPIO_RE.match(net):
+        return net
     hits = []
     for part in PARTS.values():
         if part.fp_class not in _HOP_CLASSES:
@@ -618,10 +648,14 @@ def _hop_label(net: str) -> str:
         pair = _resistor_pair(part)
         if not pair or net not in pair:
             continue
-        hits.append(pair[1] if pair[0] == net else pair[0])
-    if len(hits) == 1 and hits[0] != "GND":
-        return hits[0]
-    return net
+        other = pair[1] if pair[0] == net else pair[0]
+        hits.append((other, part.fp_class))
+    if len(hits) != 1:
+        return net
+    other, fp_class = hits[0]
+    if other == "GND":
+        return "GUARD" if fp_class in _JUMPER_CLASSES else net
+    return other
 
 
 def _compute_pinmap() -> dict[int, str]:

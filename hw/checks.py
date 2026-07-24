@@ -59,13 +59,17 @@ def test_usb_nets():
 
 
 def test_pinmap():
-    from hw.netlist import PINMAP
+    from hw.netlist import PARTS, PINMAP
     expect = {0:"GUARD",1:"TRACECLK",2:"TD0",3:"TD1",4:"TD2",5:"TD3",6:"GUARD",
               8:"I2C0_SDA",9:"I2C0_SCL",10:"LED_USER",12:"UART0_TX",13:"UART0_RX",
               14:"BTN_USER",15:"HOST_VBUS_FLT",16:"NATIVE_VBUS_DET",17:"HOST_VBUS_EN",
               18:"DEV_DP",19:"DEV_DM",20:"HOST_DP",21:"HOST_DM",26:"ISENSE",27:"DEV_VBUS_DET"}
     for gp,fn in expect.items():
         assert PINMAP[gp]==fn, f"GP{gp}: {PINMAP.get(gp)} != {fn}"
+    # Electrical distinctness lock (review fix): both PINMAP labels are
+    # "GUARD", but GP0's and GP6's guard jumpers are independent nodes -- the
+    # underlying nets must never collapse to the same string.
+    assert PARTS["PICO"].pins["1"] != PARTS["PICO"].pins["9"]
 
 
 def test_breakout():
