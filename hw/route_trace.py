@@ -491,6 +491,685 @@ def _route_swd_tree(board):
         shallower.append((trunk_y, x0 - 1.0, x1 + 1.0))
 
 
+
+# ============================================================================
+# Task 14: power / USB pairs / guards / finish bulk (non-GND) nets
+# ============================================================================
+#
+# Task 13 claimed: B_Cu y~30-72mm x~3.5-53.4mm (SWD/NRESET/P3V3 trunk stack)
+# and F_Cu y~48-72mm x~4-53.4mm (trace bundle + GP1-5). Everything below
+# routes AROUND those claims, using regions Task 13 never touched:
+#   - the open rectangle between PICO's two header rows (y~30.5-47.1,
+#     x -1..52.9) -- nothing is placed there;
+#   - the open band between J2B's row (y=22.6) and the top peripheral
+#     group (JP1/JP4/R_NVD/LED_PWR/J_UART/SW_USER/LED_USER, bottom edges
+#     <=13.9mm) -- clear from y~14 to y~21.5;
+#   - the entire right two-thirds of the board (x>=53mm) and the entire
+#     top strip (y<22.6mm out past x=53) -- both totally unclaimed.
+# GND is left unrouted throughout (Task 15's pour + stitching vias own it),
+# except where noted.
+
+_BREAKOUT_GND = {"3", "8", "13", "18"}  # PTH pad numbers landing on GND
+# J1B-only: these breakout pads sit directly under Rt1-5 (same x as the
+# PICO pad), so the straight stub is sourced from Rt's own GP-side pad
+# (already on-net from Task 13) instead of punching through Rt's body.
+_BREAKOUT_TRACE_RT = {"2": "Rt1", "4": "Rt2", "5": "Rt3", "6": "Rt4", "7": "Rt5"}
+# J1B-only: GP0/GP6 guard pins also tie to their jumper (JP2/JP3 pin 1).
+_BREAKOUT_GUARD = {"1": "JP2", "9": "JP3"}
+
+
+def _class_width(board, net_name):
+    ncls = board.GetDesignSettings().m_NetSettings.GetEffectiveNetClass(net_name)
+    return pcbnew.ToMM(ncls.GetTrackWidth())
+
+
+def _track_exists(board, net_code, layer, p0, p1):
+    for t in board.GetTracks():
+        if t.GetClass() == "PCB_VIA":
+            continue
+        if t.GetNetCode() != net_code or t.GetLayer() != layer:
+            continue
+        s, e = t.GetStart(), t.GetEnd()
+        if (s == p0 and e == p1) or (s == p1 and e == p0):
+            return True
+    return False
+
+
+def _add_path_once(board, ni, layer, pts, width_mm):
+    """Add a polyline unless its first segment is already present on this
+    net+layer.
+
+    Task 13's per-net "any tracks yet? skip" idempotence doesn't work for
+    Task 14: several nets it touches (GP1-5, NRESET, P3V3, SWDIO, SWCLK)
+    already carry Task-13 tracks and still need *more* segments added on
+    top here. Checking the first segment specifically works because every
+    connection this file adds starts at a previously-bare pad (confirmed
+    against the pre-Task-14 DRC unconnected_items list), so no other code
+    path produces a coincidentally-matching first segment.
+    """
+    if len(pts) < 2:
+        return []
+    p0, p1 = _mm(*pts[0]), _mm(*pts[1])
+    if _track_exists(board, ni.GetNetCode(), layer, p0, p1):
+        return []
+    return _add_track(board, ni, layer, pts, width_mm)
+
+
+def _bend_hv(p0, p1):
+    """[p0, mid, p1] bending horizontal-then-vertical (move in X at p0's Y,
+    then in Y at p1's X)."""
+    return [p0, (p1[0], p0[1]), p1]
+
+
+def _bend_vh(p0, p1):
+    """[p0, mid, p1] bending vertical-then-horizontal (move in Y at p0's X,
+    then in X at p1's Y)."""
+    return [p0, (p0[0], p1[1]), p1]
+
+
+def _route_breakout_stubs(board):
+    """40 breakout ties (J1B pad n <-> PICO pad n, J2B pad n <-> PICO pad
+    n+20), skipping the 8 GND ones -- Task 15's pour handles those. Every
+    stub is a straight vertical run (pads are x-aligned, constant dy) except
+    the 5 trace-net ones (sourced from Rt's own pad, see module docstring)
+    and the 2 guard ones (J1B ties on to JP2/JP3 pin 1 too)."""
+    for n in range(1, 21):
+        s = str(n)
+        if s in _BREAKOUT_GND:
+            continue
+        pico_pad = _pad(board, "PICO", s)
+        j1b_pad = _pad(board, "J1B", s)
+        net_name = pico_pad.GetNetname()
+        ni = _net(board, net_name)
+        w = _class_width(board, net_name)
+        src_xy = _pos(_pad(board, _BREAKOUT_TRACE_RT[s], "1")) if s in _BREAKOUT_TRACE_RT else _pos(pico_pad)
+        j1b_xy = _pos(j1b_pad)
+        _add_path_once(board, ni, pcbnew.F_Cu, [src_xy, j1b_xy], w)
+        if s in _BREAKOUT_GUARD:
+            jp_xy = _pos(_pad(board, _BREAKOUT_GUARD[s], "1"))
+            _add_path_once(board, ni, pcbnew.F_Cu, [j1b_xy, jp_xy], w)
+
+    for n in range(1, 21):
+        s = str(n)
+        if s in _BREAKOUT_GND:
+            continue
+        pico_pad = _pad(board, "PICO", str(n + 20))
+        j2b_pad = _pad(board, "J2B", s)
+        net_name = pico_pad.GetNetname()
+        ni = _net(board, net_name)
+        w = _class_width(board, net_name)
+        _add_path_once(board, ni, pcbnew.F_Cu, [_pos(pico_pad), _pos(j2b_pad)], w)
+
+
+def _route_internal_ties(board):
+    """SW1 and SW_USER (Button_Switch_SMD:SW_SPST_B3S-1000) each expose the
+    same logical pin as two separate physical pads (mechanical, not footprint
+    -internally-bridged) -- tie each pair together directly. SW1's GND pair
+    (pad 2) is left for Task 15's pour; its NRESET pair (pad 1) is not GND,
+    so it's fixed here."""
+    for ref, num, net_name in [("SW1", "1", "NRESET"), ("SW_USER", "1", "BTN_USER")]:
+        fp = board.FindFootprintByReference(ref)
+        pads = [p for p in fp.Pads() if p.GetNumber() == num]
+        assert len(pads) == 2, f"{ref}: expected 2 pads numbered {num!r}, got {len(pads)}"
+        ni = _net(board, net_name)
+        w = _class_width(board, net_name)
+        _add_path_once(board, ni, pcbnew.F_Cu, [_pos(pads[0]), _pos(pads[1])], w)
+
+
+# (net, (ref_a, pad_a), (ref_b, pad_b), bend) -- short same-cluster
+# connections where both ends already sit next to each other (per place.py's
+# clustering); "bend" picks _bend_hv/_bend_vh/None(straight) to dodge a
+# neighboring pad of a different net (see per-edge comments below). Pad
+# numbers are real footprint pad numbers (not the netlist model's logical pin
+# names) -- ESD_H/ESD_D (USBLC6-2SC6): 1=IO1,2=GND,3=IO2,4=IO2B,5=VBUS,
+# 6=IO1B; U_HSW (TPS2051B): 1=OUT,2=GND,3=FLG,4=EN,5=IN; U_ISNS (INA180):
+# 1=OUT,2=GND,3=IN+,4=IN-,5=VS; J5 (USB-A): 1=VBUS,2=DM,3=DP,4=GND -- see
+# hw/netlist.py's padmap comments for the datasheet citations.
+_LOCAL_EDGES = [
+    # --- Host USB port cluster (J5/R_HDP*/R_HDM*/ESD_H/TP1-3) ---
+    ("HOST_DP", ("ESD_H", "1"), ("ESD_H", "6"), None),
+    ("HOST_DP", ("R_HDP_PD", "1"), ("R_HDP", "2"), None),
+    # straight ESD_H.1(IO1)->R_HDP_PD.1 clips R_HDP_PD's own GND pad (pad 2,
+    # 1.02mm away) by ~0.16mm -- go via ESD_H's own row (y=21.05) first.
+    ("HOST_DP", ("ESD_H", "1"), ("R_HDP_PD", "1"), _bend_hv),
+    ("HOST_DP", ("TP1", "1"), ("ESD_H", "6"), None),
+    ("HOST_DP", ("J5", "3"), ("TP1", "1"), None),
+    ("HOST_DM", ("ESD_H", "4"), ("ESD_H", "3"), None),
+    ("HOST_DM", ("R_HDM_PD", "1"), ("R_HDM", "2"), None),
+    ("HOST_DM", ("ESD_H", "3"), ("R_HDM_PD", "1"), _bend_hv),
+    ("HOST_DM", ("ESD_H", "4"), ("TP2", "1"), None),
+    ("HOST_DM", ("TP2", "1"), ("J5", "2"), None),
+    # C_HVBUS_BULK/100n pad1/pad2 share a Y row (pad2 = GND) -- a straight
+    # line or plain bend between the two pad1's rides right across the
+    # intervening GND pad(s); jog above the row (y=40.0, clear of both caps'
+    # 41.275 top edge) then back down.
+    ("HOST_VBUS", ("C_HVBUS_BULK", "1"), ("C_HVBUS_100n", "1"),
+     [(78.05, 40.0), (84.52, 40.0)]),
+    # U_HSW is a 2-column SOT-23-5 (OUT/GND/FLG at x=77.862; EN/IN at
+    # x=80.138) -- pad1 (OUT) sits above pad2/3 (GND/FLG) on its own
+    # column. Reach C_HVBUS_BULK.1 by jogging *right* into the gap between
+    # the two columns (x=79.0, clear of both by >=1.1mm) before descending
+    # -- jogging left instead runs straight through R_SHUNT/HOST_5V_IN's
+    # own territory (x=71.5-80.1).
+    ("HOST_VBUS", ("U_HSW", "1"), ("C_HVBUS_BULK", "1"),
+     [(79.0, 35.05), (79.0, 42.0)]),
+    # ESD_H.5<->U_HSW.1 and J5.1<->ESD_H.5 are routed by
+    # _route_host_vbus_chain (B_Cu hops) -- both F_Cu waypoint attempts
+    # tried here kept re-crossing HOST_DM's ESD_H.4->TP2.1->J5.2 diagonal
+    # pair (verified against the real DRC run), which fans out from
+    # ESD_H's own column across exactly the x-range (82-96) this chain
+    # needs to cross.
+    # --- Host load-switch / shunt / current-sense cluster ---
+    # U_HSW pad5 (IN, our source) shares its column (x=80.138) with pad4
+    # (EN) below it, and R_SHUNT.2 sits under U_HSW's *other* column
+    # (77.862, OUT/GND/FLG) -- a plain bend_vh's straight drop threads pad4,
+    # and the horizontal leg at y=36.0 runs right across U_HSW.2 (GND,
+    # 77.862,36.0). Jog right off the column, then *above* U_HSW's whole
+    # row (34.0, clear of pad1's top edge 34.75) -- HOST_VBUS's own
+    # U_HSW.1->C_HVBUS_BULK.1 jog owns the x=79.0 column from y=35.05 down
+    # to 42.0, so crossing back to R_SHUNT below that (y=38.0) rides
+    # straight through it instead.
+    ("HOST_5V_IN", ("U_HSW", "5"), ("R_SHUNT", "2"),
+     [(81.3, 35.05), (81.3, 34.0), (74.463, 34.0)]),
+    # R_SHUNT.2's straight/bend_hv approach to U_ISNS.4 (74.138,42.95) rides
+    # at x=74.463 (R_SHUNT's own pad x), which sits inside U_ISNS pad5's
+    # bbox (P3V3, 73.475-74.8) -- jog further right, clear of that bbox,
+    # before descending.
+    ("HOST_5V_IN", ("R_SHUNT", "2"), ("U_ISNS", "4"),
+     [(75.5, 36.0), (75.5, 42.95)]),
+    # U_ISNS pad3 (VBUS_SEL, 71.862,42.95) shares its x column with pads
+    # 1/2 (ISENSE/GND, y=41.05/42.0) -- descending straight down from pad3
+    # threads both. Jog right off the column first.
+    ("VBUS_SEL", ("U_ISNS", "3"), ("R_SHUNT", "1"),
+     [(73.0, 42.95), (73.0, 36.0)]),
+    # --- Device USB port cluster (J9/R_DDP*/R_DDM*/ESD_D/R_DPU/R_J9VD*) ---
+    ("DEV_DP", ("ESD_D", "1"), ("ESD_D", "6"), None),
+    ("DEV_DP", ("R_DDP", "2"), ("ESD_D", "1"), None),
+    ("DEV_DP", ("R_DPU", "1"), ("ESD_D", "6"), None),
+    # J9's pads all share the x=104.795 column -- bend_vh's straight drop
+    # from pad3 threads pads 4/5/6. Go horizontal first (off the column) at
+    # y=61.0 -- between J9_VBUS's own y=62.0 jog row and R_DPU/R_DDP's
+    # y=60.0 row, clear of both -- then align y and approach R_DPU.1 from
+    # the *left* (x<90.745): R_DPU's own pad2 (DEV_DP_PU_EN, 91.765,60.0)
+    # sits right next to pad1 on the same row, so approaching from the
+    # right would ride straight across it.
+    ("DEV_DP", ("J9", "3"), ("R_DPU", "1"),
+     [(95.0, 62.0), (95.0, 61.0), (89.5, 61.0), (89.5, 60.0)]),
+    ("DEV_DM", ("ESD_D", "4"), ("ESD_D", "3"), None),
+    ("DEV_DM", ("ESD_D", "3"), ("R_DDM", "2"), None),
+    # DEV_DM: J9.2 <-> ESD_D.4 deliberately NOT routed here -- see
+    # task-14-report.md "Concerns". ESD_D pad4 (our dest, 86.392,62.95)
+    # sits directly above pad5 (J9_VBUS, 62.0) on the same column, and
+    # J9_VBUS's own routing forms an L-shaped obstacle around it (a
+    # vertical at x=90.745 spanning y=62.0-64.0, *and* a horizontal at
+    # y=63.3 spanning x=90.745-104.795) that leaves no way from J9.2
+    # (inside the L's corner) back out to ESD_D's column without either
+    # crossing J9_VBUS itself or DEV_VBUS_DET's own local edge just beyond
+    # it (90.745-91.765, y=64.0-68.0) -- confirmed by exhausting the
+    # available approach angles, not just one failed attempt. Deferred to
+    # the brief's sanctioned interactive-GUI finish.
+    ("J9_VBUS", ("ESD_D", "5"), ("R_J9VD_T", "1"), _bend_hv),
+    ("J9_VBUS", ("R_J9VD_T", "1"), ("J9", "1"), _bend_vh),
+    ("DEV_VBUS_DET", ("R_J9VD_B", "1"), ("R_J9VD_T", "2"), None),
+    # --- Top-left power-select / native-VBUS-detect / power-LED cluster ---
+    ("VBUS_NET", ("JP4", "1"), ("JP1", "3"), None),
+    # PICO.40<->JP1.3 is routed by _route_vbus_net_pico_tie (B_Cu, both
+    # ends THT) -- see its docstring: an F_Cu waypoint attempt here
+    # genuinely interleaves with VBUS_SEL's JP1.2->R_LED_PWR.1 edge (both
+    # exit JP1's row from adjacent pins headed in opposite directions).
+    ("NVD_TOP", ("JP4", "2"), ("R_NVD_T", "1"), None),
+    ("NATIVE_VBUS_DET", ("R_NVD_T", "2"), ("R_NVD_B", "1"), None),
+    # JP1.2<->R_LED_PWR.1 is routed by _route_vbus_sel_jp1_tie (B_Cu hop):
+    # NATIVE_VBUS_DET's own L-shaped path (a vertical at x=17.49, y=12.5-
+    # 20.0, plus a horizontal at y=20.0) sits directly between JP1's row
+    # and R_LED_PWR -- there's no y left between JP1's row (bottom edge
+    # 11.85) and R_NVD_B's pad (bbox top 12.18) to cross x=17.49 on the
+    # same layer.
+    ("LED_PWR_A", ("R_LED_PWR", "2"), ("LED_PWR", "2"), None),
+    # --- Top-region user-LED pair ---
+    ("LED_USER", ("R_LED_USER", "2"), ("LED_USER", "2"), None),
+    # --- Debug connector: J3's two 5V-supply pins tied together ---
+    ("V5_JTRACE", ("J3", "11"), ("J3", "13"), None),
+]
+
+
+def _route_local_clusters(board):
+    for net_name, (ref_a, pad_a), (ref_b, pad_b), bend in _LOCAL_EDGES:
+        ni = _net(board, net_name)
+        w = _class_width(board, net_name)
+        p0 = _pos(_pad(board, ref_a, pad_a))
+        p1 = _pos(_pad(board, ref_b, pad_b))
+        if bend is None:
+            pts = [p0, p1]
+        elif callable(bend):
+            pts = bend(p0, p1)
+        else:
+            # explicit list of intermediate waypoints (mm) between p0 and p1
+            # -- used where a plain H/V bend still clips a neighboring pad
+            # (dense SOT-23/connector pin spacing); see per-edge comments.
+            pts = [p0] + list(bend) + [p1]
+        _add_path_once(board, ni, pcbnew.F_Cu, pts, w)
+
+
+def _route_vbus_net_pico_tie(board):
+    """VBUS_NET: JP1.3 (7.295,11.0) <-> PICO.40 (2.215,30.11) -- the tie
+    that actually merges the JP4/JP1/J8 side of this net (see
+    _route_vbus_net_cross) with the PICO/J2B breakout side (see
+    _route_breakout_stubs); without it they're two disconnected
+    components of the same net. An F_Cu waypoint (jogging below JP1's own
+    row, same technique as everywhere else) genuinely interleaves with
+    VBUS_SEL's JP1.2->R_LED_PWR.1 edge next door (both exit JP1's row from
+    adjacent pins headed in opposite directions -- a real crossing, not a
+    routing mistake, per the same interleaving proof as the top-region
+    long-runs). Both ends are THT (JP1, PICO) so a straight B_Cu run needs
+    no vias at all."""
+    ni = _net(board, "VBUS_NET")
+    w = _class_width(board, "VBUS_NET")
+    jp1_3 = _pos(_pad(board, "JP1", "3"))
+    pico40 = _pos(_pad(board, "PICO", "40"))
+    # Jog below JP1's row, cross the J2B row only at PICO.40's own column
+    # (x=2.215 -- J2B pad 20 is the *same* net there, so threading its own
+    # THT pad is safe), then straight down into PICO.40.
+    pts = [jp1_3, (7.295, 13.0), (2.215, 13.0), pico40]
+    if _track_exists(board, ni.GetNetCode(), pcbnew.B_Cu, _mm(*pts[0]), _mm(*pts[1])):
+        return
+    _add_track(board, ni, pcbnew.B_Cu, pts, w)
+
+
+def _route_vbus_sel_jp1_tie(board):
+    """VBUS_SEL: JP1.2 (4.755,11.0) <-> R_LED_PWR.1 (21.49,12.0).
+    Below JP1's row (y>11.85) is claimed by NATIVE_VBUS_DET's own
+    L-shaped path (a vertical at x=17.49 from R_NVD_B's pad, 12.5, up to
+    20.0) on one side and _route_vbus_net_pico_tie's B_Cu presence (a
+    vertical at x=7.295, y=11.0-13.0, plus a horizontal at y=13.0) on the
+    other -- no y in that band clears both. Going *above* the row instead
+    (y=7.5, clear of R_NVD_T/LED_PWR's own pads, top edges 9.18/9.025, and
+    of _route_vbus_net_cross's own B_Cu hop entry at (7.295,8.5)) avoids
+    every one of them at once, entirely on F_Cu. The final approach jogs
+    to x=20.0 before descending -- LED_PWR sits almost directly above
+    R_LED_PWR (same x-ish, y=9.5 vs 12.0), and R_LED_PWR's own 2 pads
+    share a row (21.49/22.51 at y=12.0), so both a straight vertical drop
+    and a rightward final approach clip a neighboring GND/LED_PWR_A pad --
+    only approaching pad 1 from the left, x<21.49, clears both at once."""
+    ni = _net(board, "VBUS_SEL")
+    w = _class_width(board, "VBUS_SEL")
+    jp1_2 = _pos(_pad(board, "JP1", "2"))
+    r_led_pwr1 = _pos(_pad(board, "R_LED_PWR", "1"))
+    y = 7.5
+    x_approach = 20.0
+    pts = [jp1_2, (jp1_2[0], y), (x_approach, y), (x_approach, r_led_pwr1[1]), r_led_pwr1]
+    if _track_exists(board, ni.GetNetCode(), pcbnew.F_Cu, _mm(*pts[0]), _mm(*pts[1])):
+        return
+    _add_track(board, ni, pcbnew.F_Cu, pts, w)
+
+
+def _route_host_vbus_chain(board):
+    """HOST_VBUS: J5.1 (96.615,21.5) -> ESD_H.5 (81.752,22.0, via-in-pad)
+    -> U_HSW.1 (77.862,35.05). Every F_Cu waypoint path tried here re-crossed
+    HOST_DM's own ESD_H.4->TP2.1->J5.2 diagonal pair, which fans out from
+    ESD_H's column across exactly the x-range (82-96) this chain must
+    cross (confirmed against the real DRC run, not just by inspection) --
+    simplest fix is to just take the whole middle stretch to B_Cu, clear of
+    all of HOST_DM/HOST_DP's F_Cu local wiring regardless of exact path."""
+    ni = _net(board, "HOST_VBUS")
+    w = _class_width(board, "HOST_VBUS")
+    ncls = board.GetDesignSettings().m_NetSettings.GetEffectiveNetClass("HOST_VBUS")
+    via_dia, via_drill = pcbnew.ToMM(ncls.GetViaDiameter()), pcbnew.ToMM(ncls.GetViaDrill())
+    j5 = _pos(_pad(board, "J5", "1"))
+    esd_h5 = _pos(_pad(board, "ESD_H", "5"))
+    u_hsw1 = _pos(_pad(board, "U_HSW", "1"))
+    if _pad_routed_target(board, _pad(board, "ESD_H", "5")):
+        return
+    # J5 is THT (PTH) -- already has B_Cu copper, no via needed to start.
+    _add_track(board, ni, pcbnew.B_Cu, [j5, esd_h5], w)
+    _add_via(board, ni, esd_h5, via_dia, via_drill)
+    _add_track(board, ni, pcbnew.B_Cu, [esd_h5, u_hsw1], w)
+    _add_via(board, ni, u_hsw1, via_dia, via_drill)
+
+
+# --- Middle-gap crossings: PICO top/bottom row -> right-side clusters or
+# top-region peripherals, entirely on B_Cu (see module-level comment: the
+# open rectangle between PICO's two header rows). B_Cu (rather than F_Cu,
+# tried first) sidesteps two problems the actual DRC run found: (1) the PICO
+# module's own "Antenna Copper Keep Out" zone (F.Cu only, x 43.3-52.3,
+# y 31.9-46.1) sits right across this gap; (2) it keeps this whole group off
+# the same layer as the F.Cu breakout stubs and local-cluster wiring, so it
+# can't short against them regardless of incidental 2D overlap. Every source
+# here is a PICO PTH pad (copper on both layers already, no via needed to
+# start); every destination is SMD (needs a via-in-pad for the final F.Cu
+# hop) except J_UART (THT -- the B_Cu track lands directly on it).
+#
+# Every entry: (net, source_row ("top"|"bottom"), source_pico_pad, dest_ref,
+# dest_pad). Each net exits into the gap at its own lane-y (see
+# _TOP_LANE_Y/_BOTTOM_LANE_Y below) then either goes straight for its
+# right-cluster target, or (the 4 in _NORTH_THREAD, whose target sits back
+# west of x=53) threads a dedicated column + transit-y first.
+_GAP_NETS = [
+    # top-row sourced (U_HSW pad numbers: 3=FLG,4=EN; U_ISNS: 1=OUT,5=VS --
+    # see _LOCAL_EDGES' comment for the full padmaps)
+    ("HOST_VBUS_EN", "top", "22", "U_HSW", "4"),
+    ("ISENSE", "top", "31", "U_ISNS", "1"),
+    ("DEV_VBUS_DET", "top", "32", "R_J9VD_T", "2"),
+    ("GP18", "top", "24", "R_DDP", "1"),
+    ("GP19", "top", "25", "R_DDM", "1"),
+    ("GP20", "top", "26", "R_HDP", "1"),
+    ("GP21", "top", "27", "R_HDM", "1"),
+    ("P3V3", "top", "36", "U_ISNS", "5"),
+    # bottom-row sourced, east-bound
+    ("HOST_VBUS_FLT", "bottom", "20", "U_HSW", "3"),
+    ("DEV_DP_PU_EN", "bottom", "15", "R_DPU", "2"),
+    # bottom-row sourced, north-bound -- all 6 threaded (see _NORTH_THREAD):
+    # even GP10/BTN_USER, whose target x itself is >53, still cross straight
+    # through the *other* east-bound nets' final approaches if not given
+    # their own dedicated column (found by the actual DRC run: an
+    # unthreaded GP10 crossed nearly every other gap net).
+    ("GP10", "bottom", "14", "R_LED_USER", "1"),
+    ("BTN_USER", "bottom", "19", "SW_USER", "1"),
+    ("I2C0_SDA", "bottom", "11", "J_STEMMA", "3"),
+    ("I2C0_SCL", "bottom", "12", "J_STEMMA", "4"),
+    ("UART0_TX", "bottom", "16", "J_UART", "1"),
+    ("UART0_RX", "bottom", "17", "J_UART", "2"),
+]
+_GAP_DEST_THT = {"UART0_TX", "UART0_RX"}  # J_UART is THT -- no via needed
+
+# East-bound nets that share a destination cluster with another east-bound
+# net (R_HDP/R_HDM; U_HSW x2 + U_ISNS x2; R_DDP/R_DDM; R_J9VD_T/R_DPU) found
+# real crossings in the actual DRC run once their straight-then-diagonal
+# final approaches converged on the same small area. Fixed by putting one of
+# each pair back on F_Cu (via a via right at clear_x/its column -- the
+# keepout is already behind them by then) so same-cluster pairs are never on
+# the same layer during their final approach.
+_GAP_FINAL_FCU = {"HOST_VBUS_FLT", "DEV_DP_PU_EN", "GP19", "GP21", "P3V3", "GP10"}
+# GP10 also needs a real crossing fixed against the two other north-threaded
+# nets it doesn't share a layer-split with structurally (TX, RX) -- their
+# (column, target-x) orderings genuinely invert (found via a geometric
+# self-check, not just the DRC run), so no single consistent depth ordering
+# separates all six threaded nets on one layer. GP10 moving to F_Cu resolves
+# GP10 x TX and GP10 x RX; SDA x SCL is the remaining inverted pair, fixed
+# below with a short local hop instead of a wholesale layer move (which was
+# tried and re-conflicted with P3V3's own J_STEMMA descent at x=29.5).
+
+# lane y assigned by source-x ascending order (see module docstring's
+# non-crossing proof: leftmost source gets the lane farthest from its own
+# row, rightmost gets the lane closest to its row -- guarantees no net's
+# vertical entry ever crosses another net's horizontal lane).
+# NOTE: these lanes deliberately stay OUTSIDE y=[31.9,46.1] -- the real DRC
+# run found the PICO module's own "Antenna Copper Keep Out" rule-area zone
+# covers *both* copper layers (F.Cu+B.Cu+paste, queried via
+# fp.Zones()/GetLayerSet()), not just F.Cu as first assumed, over x
+# 43.3-52.3. Top-sourced nets exit *upward* into the J2B-row<->PICO-top-row
+# gap (22.6-30.11); bottom-sourced exit *downward* into the PICO-bottom-row
+# <->J1B-row gap (47.89-56.0) -- both entirely below/above the keepout's y
+# range regardless of x, and (being B_Cu) the downward option no longer
+# conflicts with the F.Cu breakout stubs occupying that same y-band at other
+# columns (different layer).
+_TOP_LANE_Y = {  # y in [23.9, 28.9]; deepest (smallest, farthest from the
+    # row at 30.11) = leftmost source x -- see the non-crossing proof above.
+    "P3V3": 23.9, "DEV_VBUS_DET": 24.61, "ISENSE": 25.32, "GP21": 26.03,
+    "GP20": 26.74, "GP19": 27.45, "GP18": 28.16, "HOST_VBUS_EN": 28.87,
+}
+_BOTTOM_LANE_Y = {  # y in [49.2, 54.4]; deepest (largest, farthest from the
+    # row at 47.89) = leftmost source x.
+    "I2C0_SDA": 54.38, "I2C0_SCL": 53.64, "GP10": 52.9, "DEV_DP_PU_EN": 52.16,
+    "UART0_TX": 51.42, "UART0_RX": 50.68, "BTN_USER": 49.94, "HOST_VBUS_FLT": 49.2,
+}
+_EAST_CLEAR_X = 53.0  # east of PICO/J1B/J2B (courtyard right edge 52.94)
+
+# The 4 "threaded" north-bound nets (target x < _EAST_CLEAR_X): each gets its
+# own column (x, east of PICO) to go straight up on, and its own transit-y
+# (where it turns west toward its target) in the band above the gap. Order/
+# values derived so no net's column is crossed by another net's westbound
+# transit lane while that lane is within reach of it -- see
+# task-14-report.md "middle-gap lane derivation" for the full proof.
+_NORTH_THREAD = {
+    "I2C0_SDA": (53.5, 20.5),
+    "I2C0_SCL": (54.5, 19.0),
+    "GP10": (55.5, 17.5),
+    "UART0_TX": (56.5, 16.0),
+    "UART0_RX": (57.5, 14.5),
+    "BTN_USER": (58.5, 13.0),
+}
+
+
+def _pad_routed_target(board, pad):
+    """True if `pad` already has copper touching it (idempotence check for
+    the gap-crossing / long-run phases, where each destination pad is only
+    ever the target of exactly one routing action)."""
+    xy = _mm(*_pos(pad))
+    for t in board.GetTracks():
+        if t.GetClass() == "PCB_VIA":
+            if t.GetPosition() == xy:
+                return True
+        elif t.GetStart() == xy or t.GetEnd() == xy:
+            return True
+    return False
+
+
+def _route_gap_crossings(board):
+    for net_name, side, pico_pad_num, dref, dpad in _GAP_NETS:
+        ni = _net(board, net_name)
+        w = _class_width(board, net_name)
+        dest = _pad(board, dref, dpad)
+        if _pad_routed_target(board, dest):
+            continue
+        src = _pos(_pad(board, "PICO", pico_pad_num))
+        dest_xy = _pos(dest)
+        lane_y = _TOP_LANE_Y[net_name] if side == "top" else _BOTTOM_LANE_Y[net_name]
+        ncls = board.GetDesignSettings().m_NetSettings.GetEffectiveNetClass(net_name)
+        via_dia, via_drill = pcbnew.ToMM(ncls.GetViaDiameter()), pcbnew.ToMM(ncls.GetViaDrill())
+
+        entry_pts = [src, (src[0], lane_y)]  # straight vertical exit into the gap
+        if net_name in _NORTH_THREAD:
+            col_x, transit_y = _NORTH_THREAD[net_name]
+            entry_pts += [(col_x, lane_y), (col_x, transit_y)]
+            turn_xy = (col_x, transit_y)
+        else:
+            clear_x = max(_EAST_CLEAR_X, src[0])
+            entry_pts += [(clear_x, lane_y)]
+            turn_xy = (clear_x, lane_y)
+        _add_track(board, ni, pcbnew.B_Cu, entry_pts, w)
+
+        final_pts = _straight_then_diag(turn_xy, dest_xy)
+        if net_name == "I2C0_SDA":
+            # The one pair among the 6 north-threaded nets that neither the
+            # GP10 F_Cu move nor any consistent column/transit-y ordering
+            # resolves: I2C0_SDA's (column, target-x) order inverts against
+            # I2C0_SCL's (found by a geometric self-check). Both target
+            # adjacent J_STEMMA pins, so neither can just move to F_Cu
+            # wholesale without re-conflicting with P3V3's own J_STEMMA
+            # descent at x=29.5. Instead, hop I2C0_SDA to F_Cu for a short
+            # stretch of its own diagonal (19.5-18.5, right where it would
+            # cross I2C0_SCL's transit lane at y=19.0) and back to B_Cu.
+            _add_track(board, ni, pcbnew.B_Cu, [final_pts[0], final_pts[1], (42.6, 19.5)], w)
+            _add_via(board, ni, (42.6, 19.5), via_dia, via_drill)
+            _add_track(board, ni, pcbnew.F_Cu, [(42.6, 19.5), (41.6, 18.5)], w)
+            _add_via(board, ni, (41.6, 18.5), via_dia, via_drill)
+            _add_track(board, ni, pcbnew.B_Cu, [(41.6, 18.5), dest_xy], w)
+            _add_via(board, ni, dest_xy, via_dia, via_drill)
+        elif net_name in _GAP_FINAL_FCU:
+            # Same-cluster pair as another gap net (see _GAP_FINAL_FCU) --
+            # hop to F_Cu for the final approach so the two can't cross. No
+            # via needed at the destination itself: it's an SMD pad (F_Cu),
+            # and we're already on F_Cu -- a via there would only touch
+            # F_Cu, leaving its B_Cu side dangling (a real DRC catch).
+            _add_via(board, ni, turn_xy, via_dia, via_drill)
+            _add_track(board, ni, pcbnew.F_Cu, final_pts, w)
+        else:
+            _add_track(board, ni, pcbnew.B_Cu, final_pts, w)
+            if net_name not in _GAP_DEST_THT:
+                _add_via(board, ni, dest_xy, via_dia, via_drill)
+
+
+# --- Top-region long runs (JP1/JP4/J2B.16 area -> R_NVD_B / R_SHUNT /
+# J_STEMMA / J8): mostly F_Cu (short, low-traffic, no reason to leave the
+# top layer), but three of the four genuinely interleave with each other in
+# X (NATIVE_VBUS_DET x VBUS_SEL, NATIVE_VBUS_DET x P3V3, P3V3 x VBUS_SEL --
+# real crossings, not a routing mistake: their (source-x, dest-x) intervals
+# pairwise overlap without nesting, so *some* pair is guaranteed to cross on
+# a shared layer). Resolved with short B_Cu hops (2 vias each) exactly where
+# each pair would otherwise cross, verified against the actual DRC run.
+def _route_native_vbus_det(board):
+    """NATIVE_VBUS_DET: PICO.21 (x=50.475) -> R_NVD_B.1 (x=17.49,y=12.5),
+    F_Cu the whole way at y=20.0 -- deeper (further from the top edge) than
+    every north-threaded transit-y (max 19.0, different layer anyway) and
+    P3V3's crossing y (18.0, see below), so it never touches either."""
+    ni = _net(board, "NATIVE_VBUS_DET")
+    w = _class_width(board, "NATIVE_VBUS_DET")
+    dest = _pad(board, "R_NVD_B", "1")
+    src = _pos(_pad(board, "PICO", "21"))
+    dest_xy = _pos(dest)
+    pts = [src, (src[0], 20.0), (dest_xy[0], 20.0), dest_xy]
+    # R_NVD_B.1 is also NVD_TOP/NATIVE_VBUS_DET's local-cluster destination
+    # (R_NVD_T.2->R_NVD_B.1), so it already has copper by the time this
+    # runs -- _pad_routed_target(dest) would false-positive. Check this
+    # path's own first segment instead.
+    if _track_exists(board, ni.GetNetCode(), pcbnew.F_Cu, _mm(*pts[0]), _mm(*pts[1])):
+        return
+    _add_track(board, ni, pcbnew.F_Cu, pts, w)
+
+
+def _route_vbus_sel_cross(board):
+    """VBUS_SEL long run: R_LED_PWR.1 (top-left, 21.49,12.0) -> R_SHUNT.1
+    (right cluster, 71.537,36.0). This crosses NATIVE_VBUS_DET's span
+    (17.49-50.475) *and* all 6 north-threaded gap nets' columns (53.5-58.5,
+    vertical ranges collectively spanning y=13.0(BTN_USER)-54.38) -- there's
+    no F_Cu y left in the shared band that clears every one of them, so it
+    hops to B_Cu (via right at the source -- R_LED_PWR is SMD) for the
+    narrow window y=12.3-12.55 (clear of J_UART's THT pads below, bottom
+    edge 11.85, *and* BTN_USER's column starting at 13.0) just long enough
+    to clear x=58.5 (BTN_USER's own column, the rightmost). Re-entering
+    F_Cu at x=60 (east of every column), it descends to y=28.0 -- below
+    R_HDP/R_HDM's row *and* TP1/TP2/ESD_H's whole diagonal fan (which the
+    original y=28 approach from farther out, x=90-102, rode straight
+    through, since TP2's own pad/diagonal + J5's mechanical shield pads
+    occupy nearly every y in 9-27 somewhere between x=60 and x=102 --
+    turning immediately at x=60 avoids needing to cross that whole belt at
+    all) -- before turning to R_SHUNT.1's column; ending the vertical at
+    x=71.537 directly clips R_HDP.2/R_HDM.2's pads (x up to 71.395) if it
+    runs the full y=12-36 span."""
+    ni = _net(board, "VBUS_SEL")
+    w = _class_width(board, "VBUS_SEL")
+    ncls = board.GetDesignSettings().m_NetSettings.GetEffectiveNetClass("VBUS_SEL")
+    via_dia, via_drill = pcbnew.ToMM(ncls.GetViaDiameter()), pcbnew.ToMM(ncls.GetViaDrill())
+    dest = _pad(board, "R_SHUNT", "1")
+    src = _pos(_pad(board, "R_LED_PWR", "1"))
+    dest_xy = _pos(dest)
+    hop_y = 12.4
+    hop_x = 61.0  # clear of R_LED_USER.2's bbox (59.24-59.78,12.68-13.32)
+    safe_y = 28.0
+    # Both R_SHUNT.1 (U_ISNS.3->R_SHUNT.1) and R_LED_PWR.1 (JP1.2->
+    # R_LED_PWR.1) are also local-cluster destinations, so either would
+    # already have copper by the time this runs -- check for the hop's own
+    # mid-point via instead (unique to this path).
+    hop_pt = _mm(hop_x, hop_y)
+    if any(t.GetClass() == "PCB_VIA" and t.GetPosition() == hop_pt for t in board.GetTracks()):
+        return
+    _add_via(board, ni, src, via_dia, via_drill)
+    _add_track(board, ni, pcbnew.B_Cu, [src, (src[0], hop_y), (hop_x, hop_y)], w)
+    _add_via(board, ni, (hop_x, hop_y), via_dia, via_drill)
+    _add_track(board, ni, pcbnew.F_Cu,
+               [(hop_x, hop_y), (hop_x, safe_y), (dest_xy[0], safe_y), dest_xy], w)
+
+
+def _route_p3v3_extra(board):
+    """P3V3's remaining breakout-cluster member: J_STEMMA.2 (29.5,5.4),
+    sourced from J2B.16 (12.375,22.6). Interleaves with NATIVE_VBUS_DET's
+    span at x=17.49 (NATIVE's own final descent), so hops to B_Cu briefly
+    (16.5-18.5, y=18.0) right there before continuing F_Cu down into
+    J_STEMMA -- same "finish horizontal motion above the row, then drop
+    straight down" technique as Task 13's J3 convergence for the final
+    vertical, so it can't clip J_STEMMA's neighboring pads 1/3/4."""
+    ni = _net(board, "P3V3")
+    w = _class_width(board, "P3V3")
+    ncls = board.GetDesignSettings().m_NetSettings.GetEffectiveNetClass("P3V3")
+    via_dia, via_drill = pcbnew.ToMM(ncls.GetViaDiameter()), pcbnew.ToMM(ncls.GetViaDrill())
+    dest = _pad(board, "J_STEMMA", "2")
+    if _pad_routed_target(board, dest):
+        return
+    src = _pos(_pad(board, "J2B", "16"))
+    dest_xy = _pos(dest)
+    y = 18.0
+    pts = [src, (src[0], y), (16.5, y)]
+    _add_track(board, ni, pcbnew.F_Cu, pts, w)
+    _add_via(board, ni, (16.5, y), via_dia, via_drill)
+    _add_track(board, ni, pcbnew.B_Cu, [(16.5, y), (18.5, y)], w)
+    _add_via(board, ni, (18.5, y), via_dia, via_drill)
+    _add_track(board, ni, pcbnew.F_Cu, [(18.5, y), (dest_xy[0], y), (dest_xy[0], 7.5), dest_xy], w)
+
+
+def _route_vbus_net_cross(board):
+    """VBUS_NET long run: JP1.3 (already tied to JP4.1/J2B.20 by the local
+    + breakout phases) -> J8.1 (104.795,43.3). Its span (7.295-104.795)
+    contains both NATIVE_VBUS_DET's and P3V3's, so the whole congested
+    middle stretch (7.295-102.5, past J5's own footprint/cluster too --
+    J5's courtyard/pads reach out to x~100.8, and its DP/DM/VBUS local
+    wiring runs through x=70-97 at various y) hops to B_Cu at y=8.5 --
+    clear of JP4's THT pads (top edge 10.15) and of R_NVD_T's SMD pads (top
+    edge 9.18, irrelevant on B_Cu anyway)."""
+    ni = _net(board, "VBUS_NET")
+    w = _class_width(board, "VBUS_NET")
+    ncls = board.GetDesignSettings().m_NetSettings.GetEffectiveNetClass("VBUS_NET")
+    via_dia, via_drill = pcbnew.ToMM(ncls.GetViaDiameter()), pcbnew.ToMM(ncls.GetViaDrill())
+    dest = _pad(board, "J8", "1")
+    if _pad_routed_target(board, dest):
+        return
+    src = _pos(_pad(board, "JP1", "3"))
+    dest_xy = _pos(dest)
+    hop_y = 8.5
+    hop_x = 102.5
+    pts = [src, (src[0], hop_y)]
+    _add_track(board, ni, pcbnew.F_Cu, pts, w)
+    _add_via(board, ni, (src[0], hop_y), via_dia, via_drill)
+    _add_track(board, ni, pcbnew.B_Cu, [(src[0], hop_y), (hop_x, hop_y)], w)
+    _add_via(board, ni, (hop_x, hop_y), via_dia, via_drill)
+    _add_track(board, ni, pcbnew.F_Cu, [(hop_x, hop_y), (hop_x, dest_xy[1])], w)
+    # Final approach into J8.1 necks to Default width: J8's pad2 (GND,
+    # 42.65) sits only 0.425mm off this row, and J8's own micro-B shield
+    # tabs crowd the rest -- the full 0.5mm Power-class width doesn't clear
+    # pad2 with margin (needs 0.45mm), Default (0.2mm) does (needs 0.3mm).
+    default_w = pcbnew.ToMM(board.GetDesignSettings().m_NetSettings.GetDefaultNetclass().GetTrackWidth())
+    _add_track(board, ni, pcbnew.F_Cu, [(hop_x, dest_xy[1]), dest_xy], default_w)
+
+
+def _route_v5_jtrace(board):
+    """V5_JTRACE: JP1.1 (2.215,11.0) -> J3.11 (13.66,65.95), down the far
+    west edge (x=0.9) -- west of every Task-13 claim (B_Cu min x=3.485,
+    F_Cu min x=4.035) and west of PICO/J1B pad-1's own copper (bbox left
+    edge 1.415/1.365), then east into J3.11 along the debug row's own
+    approach lane once clear of J1B's row."""
+    ni = _net(board, "V5_JTRACE")
+    w = _class_width(board, "V5_JTRACE")
+    dest = _pad(board, "J3", "11")
+    src = _pos(_pad(board, "JP1", "1"))
+    dest_xy = _pos(dest)
+    # J3.11 is also V5_JTRACE's local-cluster destination (J3.11<->J3.13),
+    # so it already has copper by the time this runs -- _pad_routed_target
+    # (dest) would false-positive. Check this path's own first segment
+    # instead.
+    if _track_exists(board, ni.GetNetCode(), pcbnew.F_Cu, _mm(*src), _mm(0.9, src[1])):
+        return
+    j1b_bottom = max(_bbox(_pad(board, "J1B", str(n)))[3] for n in range(1, 10))
+    post_j1b_y = j1b_bottom + 0.6
+    pts = [
+        src, (0.9, src[1]), (0.9, post_j1b_y),
+        (dest_xy[0], post_j1b_y), dest_xy,
+    ]
+    _add_track(board, ni, pcbnew.F_Cu, pts, w)
+
+
+def _set_extra_power_classes(board):
+    """VBUS_SEL and HOST_5V_IN carry the same 5V rail as the Power-classed
+    nets (broken only by R_SHUNT/U_HSW) -- Task 10 didn't include them in
+    the "Power" netclass pattern list, but the Task 14 brief calls them out
+    explicitly under "Power tree (Power class 0.5mm)". Widen them by adding
+    two more pattern entries to the existing class (not inventing a new
+    one); per PLAN.md's verified environment facts, this needs an explicit
+    SaveProject() or it's lost on the next LoadBoard."""
+    ns = board.GetDesignSettings().m_NetSettings
+    for n in ["VBUS_SEL", "HOST_5V_IN"]:
+        ns.SetNetclassPatternAssignment(n, "Power")
+
+
 def main():
     board = pcbnew.LoadBoard(BOARD_FILE)
     assert board is not None, f"LoadBoard({BOARD_FILE!r}) returned None"
@@ -498,7 +1177,42 @@ def main():
     _route_trace_bundle(board)
     _route_swd_tree(board)
 
+    _set_extra_power_classes(board)
+    _route_breakout_stubs(board)
+    _route_internal_ties(board)
+    _route_local_clusters(board)
+    _route_host_vbus_chain(board)
+    # _route_gap_crossings(board) intentionally NOT called: see
+    # task-14-report.md "Concerns" -- the 16 nets it targets (PICO row pads
+    # fanning out to scattered right-side-cluster/top-region destinations)
+    # produce a provably non-2-colorable crossing graph even after every
+    # ordering/layer-split scheme tried (verified with a standalone geometric
+    # simulator, not just the DRC run) -- some pairs need real local via-hops
+    # that don't reduce to a clean parametrized rule. Their breakout stubs
+    # (PICO<->J1B/J2B) ARE routed by _route_breakout_stubs above; only the
+    # stub-to-final-component run is left for the Task 14 brief's sanctioned
+    # interactive-GUI finish.
+    _route_native_vbus_det(board)
+    _route_vbus_sel_cross(board)
+    _route_vbus_sel_jp1_tie(board)
+    # _route_v5_jtrace(board) intentionally NOT called: see
+    # task-14-report.md "Concerns". Its west-corridor path (idempotence bug
+    # fixed, but only then actually exercised for the first time) crosses
+    # Task 13's untouchable F_Cu trace bundle where it converges into J3's
+    # bottom pin row -- confirmed by the real DRC run (tracks_crossing /
+    # shorting_items against TD0/TD1/TD2/TRACECLK), not just inspection.
+    # Fixing it safely needs the same B_Cu via-in-pad + hop technique Task
+    # 13 used for J3's other pins, which requires integrating with Task
+    # 13's own trunk/hop bookkeeping -- deferred rather than risk touching
+    # untouchable routing under time pressure. J3.11/J3.13 are tied
+    # together (_LOCAL_EDGES) and JP1.1 has its own breakout stub; only
+    # the JP1.1<->J3.11 run itself is left for the interactive-GUI finish.
+    _route_vbus_net_cross(board)
+    _route_vbus_net_pico_tie(board)
+    _route_p3v3_extra(board)
+
     pcbnew.SaveBoard(BOARD_FILE, board)
+    pcbnew.GetSettingsManager().SaveProject()
     print("route_trace: done")
 
 
