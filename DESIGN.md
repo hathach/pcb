@@ -37,21 +37,21 @@ Prior art consulted: SEGGER STM32H7/STM32F407 Trace Reference Board schematics (
 
 ## 4. Connectors & jumpers (reference designators)
 
-| Ref | Part | Purpose |
-|-----|------|---------|
-| J1, J2 | 1×20 female socket ×2 (inner) | Pico 2 socket |
-| J1B, J2B | 1×20 female socket ×2 (outer) | per-pin breakout |
-| J3 | MIPI-20 Cortex Debug+ETM, 2×10 1.27 mm shrouded/keyed (Samtec ASP-152705-01 / FTSH-110-01-L-DV-K) | J-Trace: SWD + 4-bit ETM |
-| J4 | JST-SH 1.0 mm 3-pin, right-angle | cable to the Pico 2 DEBUG port (brings SWD onto the board) |
-| J5 | USB-A receptacle, THT right-angle | PIO-USB **host** port |
-| J6 | 2×5 1.27 mm Cortex Debug (Conn_ARM_JTAG_SWD_10 / FTSH-105-01-L-DV-K) | plain J-Link: SWD only |
-| J7 | JST-SH 1.0 mm 3-pin, right-angle | Raspberry Pi **Debug Probe** ("pico-debug") jack, mirrors J4 |
-| J8 | micro-B receptacle, **power-only** (VBUS+GND; D+/D− NC) | 5 V input for host-stack work |
-| J9 | micro-B receptacle | PIO-USB **device** port |
-| JP1 | 3-pin header + shunt | board 5 V source select: VBUS-net ↔ J-Trace 5 V |
-| JP2, JP3 | 2-pin header + shunt (default fitted) | GP0 / GP6 GND **guard** jumpers |
-| JP4 | 2-pin header + shunt (default fitted) | native VBUS-detect tap enable → GP16 (§9) |
-| SW1 | tactile button, top-mount, medium | RUN reset |
+| Ref      | Part                                                                                              | Purpose                                                      |
+| -------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| J1, J2   | 1×20 female socket ×2 (inner)                                                                     | Pico 2 socket                                                |
+| J1B, J2B | 1×20 female socket ×2 (outer)                                                                     | per-pin breakout                                             |
+| J3       | MIPI-20 Cortex Debug+ETM, 2×10 1.27 mm shrouded/keyed (Samtec ASP-152705-01 / FTSH-110-01-L-DV-K) | J-Trace: SWD + 4-bit ETM                                     |
+| J4       | JST-SH 1.0 mm 3-pin, right-angle                                                                  | cable to the Pico 2 DEBUG port (brings SWD onto the board)   |
+| J5       | USB-A receptacle, THT right-angle                                                                 | PIO-USB **host** port                                        |
+| J6       | 2×5 1.27 mm Cortex Debug (Conn_ARM_JTAG_SWD_10 / FTSH-105-01-L-DV-K)                              | plain J-Link: SWD only                                       |
+| J7       | JST-SH 1.0 mm 3-pin, right-angle                                                                  | Raspberry Pi **Debug Probe** ("pico-debug") jack, mirrors J4 |
+| J8       | micro-B receptacle, **power-only** (VBUS+GND; D+/D− NC)                                           | 5 V input for host-stack work                                |
+| J9       | micro-B receptacle                                                                                | PIO-USB **device** port                                      |
+| JP1      | 3-pin header + shunt                                                                              | board 5 V source select: VBUS-net ↔ J-Trace 5 V              |
+| JP2, JP3 | 2-pin header + shunt (default fitted)                                                             | GP0 / GP6 GND **guard** jumpers                              |
+| JP4      | 2-pin header + shunt (default fitted)                                                             | native VBUS-detect tap enable → GP16 (§9)                    |
+| SW1      | tactile button, top-mount, medium                                                                 | RUN reset                                                    |
 
 Debug connectors J3/J4/J6/J7 grouped on one board edge so the shared SWD fan-out stays short.
 
@@ -59,18 +59,18 @@ Debug connectors J3/J4/J6/J7 grouped on one board edge so the shared SWD fan-out
 
 ### 5.1 MIPI-20 (J3), per the SEGGER J-Trace pinout (image-authoritative; verified against SEGGER STM32H7 ref board)
 
-| Pin | Net | Source | | Pin | Net | Source |
-|--|--|--|--|--|--|--|
-| 1 | VTref | Pico 3V3_OUT (pin 36) | | 2 | SWDIO | JST-SH DEBUG (J4) |
-| 3 | GND | | | 4 | SWCLK | JST-SH DEBUG (J4) |
-| 5 | GND | | | 6 | SWO | **NC** (RP2350 has none) |
-| 7 | KEY | NC | | 8 | TDI | **NC** |
-| 9 | GND | (GNDDetect → GND, per SEGGER ref board) | | 10 | nRESET | RUN (pin 30) |
-| 11 | **5V-Supply** | J-Trace 5 V → JP1 | | 12 | TRACECLK | GP1 (pin 2) via Rterm |
-| 13 | **5V-Supply** | J-Trace 5 V → JP1 | | 14 | TRACEDATA0 | GP2 (pin 4) via Rterm |
-| 15 | GND | | | 16 | TRACEDATA1 | GP3 (pin 5) via Rterm |
-| 17 | GND | | | 18 | TRACEDATA2 | GP4 (pin 6) via Rterm |
-| 19 | GND | | | 20 | TRACEDATA3 | GP5 (pin 7) via Rterm |
+| Pin | Net           | Source                                  |     | Pin | Net        | Source                   |
+| --- | ------------- | --------------------------------------- | --- | --- | ---------- | ------------------------ |
+| 1   | VTref         | Pico 3V3_OUT (pin 36)                   |     | 2   | SWDIO      | JST-SH DEBUG (J4)        |
+| 3   | GND           |                                         |     | 4   | SWCLK      | JST-SH DEBUG (J4)        |
+| 5   | GND           |                                         |     | 6   | SWO        | **NC** (RP2350 has none) |
+| 7   | KEY           | NC                                      |     | 8   | TDI        | **NC**                   |
+| 9   | GND           | (GNDDetect → GND, per SEGGER ref board) |     | 10  | nRESET     | RUN (pin 30)             |
+| 11  | **5V-Supply** | J-Trace 5 V → JP1                       |     | 12  | TRACECLK   | GP1 (pin 2) via Rterm    |
+| 13  | **5V-Supply** | J-Trace 5 V → JP1                       |     | 14  | TRACEDATA0 | GP2 (pin 4) via Rterm    |
+| 15  | GND           |                                         |     | 16  | TRACEDATA1 | GP3 (pin 5) via Rterm    |
+| 17  | GND           |                                         |     | 18  | TRACEDATA2 | GP4 (pin 6) via Rterm    |
+| 19  | GND           |                                         |     | 20  | TRACEDATA3 | GP5 (pin 7) via Rterm    |
 
 ### 5.2 Cortex Debug 2×5 (J6) — plain J-Link
 
@@ -90,31 +90,31 @@ Both JST-SH 3-pin, pinout **SWCLK / GND / SWDIO** (Raspberry Pi debug standard).
 
 ## 6. GPIO pin map (Pico/Pico 2, RP2350A header)
 
-| GPIO | Function | Notes |
-|--|--|--|
-| 0 | GND guard (JP2) | pin 1, next to TRACECLK; jumper to GND, default on |
-| 1 | TRACECLK | funcsel 9 (CORESIGHT); also default UART0 RX — **not routed to UART** |
-| 2–5 | TRACEDATA0–3 | funcsel 9 |
-| 6 | GND guard (JP3) | pin 9, next to trace block; jumper to GND, default on |
-| 7 | spare | |
-| 8 | I2C0 SDA (STEMMA-QT) | moved off GP6/7 to keep active signals away from trace |
-| 9 | I2C0 SCL (STEMMA-QT) | |
-| 10 | user LED | |
-| 11 | spare | |
-| 12 | UART0 TX (console) | remapped off GP0/1 → **full-duplex console during trace** |
-| 13 | UART0 RX (console) | |
-| 14 | user button | to GND |
-| 15 | host VBUS fault | load-switch open-drain flag; `OVERCURR_DETECT`-capable pin |
-| 16 | native VBUS-detect tap | `VBUS_DETECT`-capable; 8.2k/8.2k from VBUS net via JP-gate |
-| 17 | host VBUS enable | load-switch enable; `VBUS_EN`-capable pin |
-| 18 | PIO-USB device D+ (J9) | |
-| 19 | PIO-USB device D− (J9) | |
-| 20 | PIO-USB host D+ (J5) | |
-| 21 | PIO-USB host D− (J5) | |
-| 22 | spare | |
-| 26 | VBUS current-sense (ADC) | shunt + INA181 amp output |
-| 27 | J9 device VBUS-detect | plain GPIO, 8.2k/8.2k divider |
-| 28 | spare | ADC-capable |
+| GPIO | Function                 | Notes                                                                 |
+| ---- | ------------------------ | --------------------------------------------------------------------- |
+| 0    | GND guard (JP2)          | pin 1, next to TRACECLK; jumper to GND, default on                    |
+| 1    | TRACECLK                 | funcsel 9 (CORESIGHT); also default UART0 RX — **not routed to UART** |
+| 2–5  | TRACEDATA0–3             | funcsel 9                                                             |
+| 6    | GND guard (JP3)          | pin 9, next to trace block; jumper to GND, default on                 |
+| 7    | spare                    |                                                                       |
+| 8    | I2C0 SDA (STEMMA-QT)     | moved off GP6/7 to keep active signals away from trace                |
+| 9    | I2C0 SCL (STEMMA-QT)     |                                                                       |
+| 10   | user LED                 |                                                                       |
+| 11   | spare                    |                                                                       |
+| 12   | UART0 TX (console)       | remapped off GP0/1 → **full-duplex console during trace**             |
+| 13   | UART0 RX (console)       |                                                                       |
+| 14   | user button              | to GND                                                                |
+| 15   | host VBUS fault          | load-switch open-drain flag; `OVERCURR_DETECT`-capable pin            |
+| 16   | native VBUS-detect tap   | `VBUS_DETECT`-capable; 8.2k/8.2k from VBUS net via JP-gate            |
+| 17   | host VBUS enable         | load-switch enable; `VBUS_EN`-capable pin                             |
+| 18   | PIO-USB device D+ (J9)   |                                                                       |
+| 19   | PIO-USB device D− (J9)   |                                                                       |
+| 20   | PIO-USB host D+ (J5)     |                                                                       |
+| 21   | PIO-USB host D− (J5)     |                                                                       |
+| 22   | spare                    |                                                                       |
+| 26   | VBUS current-sense (ADC) | shunt + INA181 amp output                                             |
+| 27   | J9 device VBUS-detect    | plain GPIO, 8.2k/8.2k divider                                         |
+| 28   | spare                    | ADC-capable                                                           |
 
 Module-internal pins (not on header, unusable by the carrier): GP23 (SMPS PS), GP24 (VBUS sense), GP25 (LED), GP29 (VSYS/3 ADC).
 
