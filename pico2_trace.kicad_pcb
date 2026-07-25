@@ -137,7 +137,7 @@
 		(descr "SOT, 8 Pin (JEDEC MO-178 Var BA https://www.jedec.org/document_search?search_api_views_fulltext=MO-178), generated with kicad-footprint-generator ipc_gullwing_generator.py")
 		(tags "SOT TO_SOT_SMD")
 		(property "Reference" "U_INA219_ALT"
-			(at 3.513273 -6.085166 0)
+			(at 2.867741 -0.768408 90)
 			(layer "F.SilkS")
 			(uuid "35d7bc76-8be6-4bdd-a734-2e4b82b92164")
 			(effects
@@ -500,7 +500,7 @@
 		(descr "SOT, 5 Pin (JEDEC MO-178 Var AA https://www.jedec.org/document_search?search_api_views_fulltext=MO-178), generated with kicad-footprint-generator ipc_gullwing_generator.py")
 		(tags "SOT TO_SOT_SMD")
 		(property "Reference" "U_HSW"
-			(at -1.763273 3.054077 0)
+			(at -1.657477 2.870833 0)
 			(layer "F.SilkS")
 			(uuid "a9d15017-1400-469e-9b1a-ddf34b2ac88c")
 			(effects
@@ -839,7 +839,7 @@
 		(descr "Surface Mount Tactile Switch for High-Density Packaging")
 		(tags "Tactile Switch")
 		(property "Reference" "SW1"
-			(at 4.548871 -4.548872 0)
+			(at 5.195 0 0)
 			(layer "F.SilkS")
 			(uuid "a125a07e-0faf-4fef-b09d-5947e171e94e")
 			(effects
@@ -1117,7 +1117,7 @@
 		(descr "SMD pad as test Point, diameter 1.5mm")
 		(tags "test point SMD pad")
 		(property "Reference" "TP3"
-			(at 0.512029 1.915599 0)
+			(at 1.147135 1.989068 0)
 			(layer "F.SilkS")
 			(uuid "af927831-026b-443d-8bf7-a8489b7675c2")
 			(effects
@@ -1214,7 +1214,7 @@
 		(descr "LED SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: http://www.tortai-tech.com/upload/download/2011102023233369053.pdf), generated with kicad-footprint-generator")
 		(tags "LED")
 		(property "Reference" "LED_USER"
-			(at -2.510629 0 0)
+			(at -2.468173 1.425 0)
 			(layer "F.SilkS")
 			(uuid "357cc646-dcc2-4441-bec7-2fc54bc334ad")
 			(effects
@@ -1427,7 +1427,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "R_J9VD_T"
-			(at -2.320787 0.621853 0)
+			(at -2.230703 0.597715 0)
 			(layer "F.SilkS")
 			(uuid "1b6f183f-7b25-4efb-8fcf-b0d580e6d0a6")
 			(effects
@@ -1620,7 +1620,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "R_J9VD_B"
-			(at -1.698935 -1.698934 0)
+			(at -1.858503 -1.858502 0)
 			(layer "F.SilkS")
 			(uuid "5f5cb676-17d2-4939-bf19-2e7230d66c3f")
 			(effects
@@ -1813,7 +1813,7 @@
 		(descr "Capacitor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "capacitor")
 		(property "Reference" "C_NRESET"
-			(at -0.383131 -1.429861 0)
+			(at 0 -1.305 0)
 			(layer "F.SilkS")
 			(uuid "33077b16-f873-45a1-bff7-4bbbeb93a005")
 			(effects
@@ -2006,7 +2006,7 @@
 		(descr "Samtec FTSH-105-01-DV, 2x05 1.27mm SMD keyed shroud box header (ARM Cortex Debug connector); derived from stock PinHeader_2x05_P1.27mm_Vertical_SMD")
 		(tags "Samtec FTSH 2x05 1.27mm SMD keyed shroud Cortex Debug")
 		(property "Reference" "J6"
-			(at -1.518123 5.665714 0)
+			(at 4.681411 -2.702814 0)
 			(layer "F.SilkS")
 			(uuid "3db80a21-f646-48e7-a620-095b4b578dfd")
 			(effects
@@ -2632,7 +2632,7 @@
 		(descr "Through hole straight pin header, 1x02, 2.54mm pitch, single row")
 		(tags "Through hole pin header THT 1x02 2.54mm single row")
 		(property "Reference" "JP2"
-			(at -2.640067 3.915067 0)
+			(at -2.380685 3.655685 0)
 			(layer "F.SilkS")
 			(uuid "2ff90c2f-9724-4209-be86-a0cbf1e0f38c")
 			(effects
@@ -2878,7 +2878,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "R_DPU"
-			(at 1.837824 -0.492443 0)
+			(at 1.74774 -0.468305 0)
 			(layer "F.SilkS")
 			(uuid "f7ff5240-bbf5-4bc2-bd2e-8d275ba3e433")
 			(effects
@@ -3071,7 +3071,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "R_HDM_PD"
-			(at 2.900342 0.777145 0)
+			(at 4.259147 -1.141235 90)
 			(layer "F.SilkS")
 			(uuid "ab405977-cc55-463d-8e0e-fa655bc515f0")
 			(effects
@@ -3264,7 +3264,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "Rt1"
-			(at 0 1.902655 0)
+			(at 0 1.815 0)
 			(layer "F.SilkS")
 			(uuid "2d464688-fce8-4194-916d-8b5d327069bf")
 			(effects
@@ -3457,7 +3457,7 @@
 		(descr "GCT USB1046, USB Type A, https://gct.co/files/drawings/usb1046.pdf")
 		(tags "USB SMD Type-A Receptacle Right Angle")
 		(property "Reference" "J5"
-			(at 0 10.515554 0)
+			(at 0 7.425 0)
 			(layer "F.SilkS")
 			(uuid "71a6a1b0-262f-4733-bcc3-334f7b23f125")
 			(effects
@@ -3874,7 +3874,7 @@
 		(descr "LED SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: http://www.tortai-tech.com/upload/download/2011102023233369053.pdf), generated with kicad-footprint-generator")
 		(tags "LED")
 		(property "Reference" "LED_PWR"
-			(at -2.510629 0.000001 0)
+			(at -2.780704 0.745088 0)
 			(layer "F.SilkS")
 			(uuid "d4f2e397-3d8f-4fbe-9ec8-47fe95e1fcd7")
 			(effects
@@ -4183,7 +4183,7 @@
 		(descr "Through hole straight pin header, 1x02, 2.54mm pitch, single row")
 		(tags "Through hole pin header THT 1x02 2.54mm single row")
 		(property "Reference" "JP4"
-			(at -2.640067 3.915067 0)
+			(at -2.380685 3.655685 0)
 			(layer "F.SilkS")
 			(uuid "61f7e860-24c0-41e1-8442-9638a6b694f2")
 			(effects
@@ -4428,7 +4428,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "R_NVD_B"
-			(at 2.123198 2.123199 0)
+			(at 1.858502 1.858503 0)
 			(layer "F.SilkS")
 			(uuid "93fe3dca-1d9b-4120-a912-46bc9e85354b")
 			(effects
@@ -4621,7 +4621,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "Rt5"
-			(at 0 4.502655 0)
+			(at -5.274999 0 0)
 			(layer "F.SilkS")
 			(uuid "08d2c43f-03e2-49d9-9676-cb9bb729b3dd")
 			(effects
@@ -4910,7 +4910,7 @@
 		(descr "SOT, 6 Pin (JEDEC MO-178 Var AB https://www.jedec.org/document_search?search_api_views_fulltext=MO-178), generated with kicad-footprint-generator ipc_gullwing_generator.py")
 		(tags "SOT TO_SOT_SMD")
 		(property "Reference" "ESD_D"
-			(at 0 -2.876546 0)
+			(at 0.674626 2.51774 0)
 			(layer "F.SilkS")
 			(uuid "74506985-eec2-4500-8152-2f11ba571571")
 			(effects
@@ -5257,7 +5257,7 @@
 		(descr "Resistor SMD 1206 (3216 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "R_SHUNT"
-			(at 1.948109 -1.94811 0)
+			(at -4.979647 2.875 0)
 			(layer "F.SilkS")
 			(uuid "6b498b3b-2c4b-4591-8daf-d3cd5d859454")
 			(effects
@@ -5450,7 +5450,7 @@
 		(descr "Capacitor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "capacitor")
 		(property "Reference" "C_HVBUS_100n"
-			(at 3.187234 -1.84015 0)
+			(at 3.819172 -2.205 0)
 			(layer "F.SilkS")
 			(uuid "fe09adc3-0961-45c8-9c9d-d582fe0ce02d")
 			(effects
@@ -5643,7 +5643,7 @@
 		(descr "Through hole straight pin header, 1x03, 2.54mm pitch, single row")
 		(tags "Through hole pin header THT 1x03 2.54mm single row")
 		(property "Reference" "J_UART"
-			(at -2.434038 6.755878 0)
+			(at 2.507821 1.092109 0)
 			(layer "F.SilkS")
 			(uuid "c3587545-5d30-461e-be5c-2a867c11c8cf")
 			(effects
@@ -5897,7 +5897,7 @@
 		(descr "Samtec FTSH-110-01-DV, 2x10 1.27mm SMD keyed shroud box header (SEGGER MIPI-20 debug/trace connector); derived from stock PinHeader_2x10_P1.27mm_Vertical_SMD")
 		(tags "Samtec FTSH 2x10 1.27mm SMD keyed shroud MIPI-20 debug trace")
 		(property "Reference" "J3"
-			(at 0 8.294522 0)
+			(at 4.617843 -4.617843 0)
 			(layer "F.SilkS")
 			(uuid "55e5815b-2af0-48a9-bfd8-b880c24b55a7")
 			(effects
@@ -6893,7 +6893,7 @@
 		(descr "Through hole straight pin header, 1x03, 2.54mm pitch, single row")
 		(tags "Through hole pin header THT 1x03 2.54mm single row")
 		(property "Reference" "JP1"
-			(at -2.434038 6.755878 0)
+			(at -2.615 2.54 0)
 			(layer "F.SilkS")
 			(uuid "0bf12d47-0f6b-40fb-866a-89e6c13c5943")
 			(effects
@@ -7147,7 +7147,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "R_HVEN_PD"
-			(at 1.851327 3.206595 0)
+			(at 2.017839 1.165001 0)
 			(layer "F.SilkS")
 			(uuid "9de6cdb1-d4d3-4a8e-8994-f2b087fa29a2")
 			(effects
@@ -7340,7 +7340,7 @@
 		(descr "Micro USB B receptable with flange, bottom-mount, SMD, right-angle (http://www.molex.com/pdm_docs/sd/473460001_sd.pdf)")
 		(tags "Micro B USB SMD")
 		(property "Reference" "J9"
-			(at -5.724902 2.133982 0)
+			(at -4.889888 -0.710242 0)
 			(layer "F.SilkS")
 			(uuid "6b2f5b87-5b5a-4904-b9b1-f3b73e4b88cc")
 			(effects
@@ -7656,7 +7656,7 @@
 		(descr "Through hole straight socket strip, 1x20, 2.54mm pitch, single row (from Kicad 4.0.7), script generated")
 		(tags "Through hole socket strip THT 1x20 2.54mm single row")
 		(property "Reference" "J1B"
-			(at -6.795384 49.367418 0)
+			(at 2.360686 21.714314 0)
 			(layer "F.SilkS")
 			(uuid "e7069c85-98e8-4df3-b160-a17015f299f9")
 			(effects
@@ -8066,7 +8066,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "R_LED_USER"
-			(at -1.837824 0.492443 0)
+			(at -1.858502 -1.858503 0)
 			(layer "F.SilkS")
 			(uuid "12f60013-0262-4ae1-975f-bcf4244552e4")
 			(effects
@@ -8355,7 +8355,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "R_NVD_T"
-			(at -3.820254 -3.820255 0)
+			(at 5.128482 1.374172 0)
 			(layer "F.SilkS")
 			(uuid "b6402d57-56a0-43a2-8b8d-dea9cd0711a7")
 			(effects
@@ -8548,7 +8548,7 @@
 		(descr "Through hole straight pin header, 1x03, 2.54mm pitch, single row")
 		(tags "Through hole pin header THT 1x03 2.54mm single row")
 		(property "Reference" "J10"
-			(at -3.44225 5.98225 0)
+			(at 1.89 -0.733577 0)
 			(layer "F.SilkS")
 			(uuid "8e776093-06ef-41c4-983c-abe87766b764")
 			(effects
@@ -8802,7 +8802,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "R_HDP"
-			(at -1.345381 -1.345381 0)
+			(at -1.434239 -1.434239 0)
 			(layer "F.SilkS")
 			(uuid "a4c5fe14-e80f-41e7-9a37-c585a05b9684")
 			(effects
@@ -8995,7 +8995,7 @@
 		(descr "JST SH series connector, SM03B-SRSS-TB (http://www.jst-mfg.com/product/pdf/eng/eSH.pdf), generated with kicad-footprint-generator")
 		(tags "connector JST SH horizontal")
 		(property "Reference" "J7"
-			(at 4.769611 1.278013 0)
+			(at -3.431067 -3.431067 0)
 			(layer "F.SilkS")
 			(uuid "ae453d94-bdea-4155-bfa5-3972e45e511f")
 			(effects
@@ -9270,7 +9270,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "Rt2"
-			(at -5.402655 0 0)
+			(at -5.274999 0 0)
 			(layer "F.SilkS")
 			(uuid "0cac7d37-696d-4491-9873-6d19cde4b140")
 			(effects
@@ -9463,7 +9463,7 @@
 		(descr "Through hole straight pin header, 1x02, 2.54mm pitch, single row")
 		(tags "Through hole pin header THT 1x02 2.54mm single row")
 		(property "Reference" "JP3"
-			(at -2.640067 3.915067 0)
+			(at -2.380685 3.655685 0)
 			(layer "F.SilkS")
 			(uuid "3c86cfd3-db37-4579-befb-9edb509760e8")
 			(effects
@@ -9708,7 +9708,7 @@
 		(descr "Surface Mount Tactile Switch for High-Density Packaging")
 		(tags "Tactile Switch")
 		(property "Reference" "SW_USER"
-			(at 6.433076 0 0)
+			(at 1.210524 4.51774 0)
 			(layer "F.SilkS")
 			(uuid "4f9b3e3a-a138-442d-a2b5-028e1d465eee")
 			(effects
@@ -9986,7 +9986,7 @@
 		(descr "Micro USB B receptable with flange, bottom-mount, SMD, right-angle (http://www.molex.com/pdm_docs/sd/473460001_sd.pdf)")
 		(tags "Micro B USB SMD")
 		(property "Reference" "J8"
-			(at -5.926854 0.6 0)
+			(at -4.889888 -0.710241 0)
 			(layer "F.SilkS")
 			(uuid "2f7d174c-b804-4969-b0cd-bdb02cb802c8")
 			(effects
@@ -10300,7 +10300,7 @@
 		(descr "Capacitor SMD 0805 (2012 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf, https://docs.google.com/spreadsheets/d/1BsfQQcO9C6DZCsRaXUlFlo91Tg2WpOkGARC1WS5S8t0/edit?usp=sharing), generated with kicad-footprint-generator")
 		(tags "capacitor")
 		(property "Reference" "C_HVBUS_BULK"
-			(at 4.004303 -2.311885 0)
+			(at 4.689486 -2.707476 0)
 			(layer "F.SilkS")
 			(uuid "177d3ff3-c796-46ba-adc6-75f81454488e")
 			(effects
@@ -10493,7 +10493,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "R_LED_PWR"
-			(at -1.165373 4.349231 0)
+			(at -6.094406 1.632991 0)
 			(layer "F.SilkS")
 			(uuid "67fe5333-b646-4b9b-8bf8-5e899cb598a0")
 			(effects
@@ -10782,7 +10782,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "R_DDP"
-			(at -0.388916 -1.451455 0)
+			(at -0.474459 -1.770704 0)
 			(layer "F.SilkS")
 			(uuid "9191b760-d999-49ec-a118-e6c9d02e1331")
 			(effects
@@ -10975,7 +10975,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "R_DDM"
-			(at 0 1.502655 0)
+			(at 1.434238 1.434238 0)
 			(layer "F.SilkS")
 			(uuid "9fb6ad94-e664-42f3-b3f3-8c81f1520f73")
 			(effects
@@ -11168,7 +11168,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "R_HDM"
-			(at -0.951328 1.647748 0)
+			(at -0.947336 1.640833 0)
 			(layer "F.SilkS")
 			(uuid "59280944-c0a8-41fb-ad30-a06045069cb5")
 			(effects
@@ -11361,7 +11361,7 @@
 		(descr "SOT, 6 Pin (JEDEC MO-178 Var AB https://www.jedec.org/document_search?search_api_views_fulltext=MO-178), generated with kicad-footprint-generator ipc_gullwing_generator.py")
 		(tags "SOT TO_SOT_SMD")
 		(property "Reference" "ESD_H"
-			(at 0.744504 2.778529 0)
+			(at 0.674626 2.51774 0)
 			(layer "F.SilkS")
 			(uuid "97df7508-1746-4553-a643-928b9916628e")
 			(effects
@@ -11708,7 +11708,7 @@
 		(descr "Raspberry Pi Pico common (Pico & Pico W) through-hole footprint, supports Raspberry Pi Pico 2, default socketed model has height of 8.51mm, https://datasheets.raspberrypi.com/pico/pico-datasheet.pdf")
 		(tags "module usb pcb antenna")
 		(property "Reference" "PICO"
-			(at 8.89 53.257906 0)
+			(at 8.89 50.875 0)
 			(unlocked yes)
 			(layer "F.SilkS")
 			(uuid "9693cd4e-82f5-40a9-b600-ea8b019cf97a")
@@ -13230,7 +13230,7 @@
 		(descr "Through hole straight socket strip, 1x20, 2.54mm pitch, single row (from Kicad 4.0.7), script generated")
 		(tags "Through hole socket strip THT 1x20 2.54mm single row")
 		(property "Reference" "J2B"
-			(at 13.054378 1.445853 0)
+			(at 2.360685 21.714315 0)
 			(layer "F.SilkS")
 			(uuid "0d2bf439-70a6-47ad-8330-15e2931c1997")
 			(effects
@@ -13637,7 +13637,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "Rt3"
-			(at -5.402655 0 0)
+			(at -5.274999 0 0)
 			(layer "F.SilkS")
 			(uuid "71704423-e8b7-46a4-9fad-d873af915a0c")
 			(effects
@@ -13830,7 +13830,7 @@
 		(descr "SMD pad as test Point, diameter 1.5mm")
 		(tags "test point SMD pad")
 		(property "Reference" "TP1"
-			(at -0.001254 1.983174 0)
+			(at -0.001254 2.096248 0)
 			(layer "F.SilkS")
 			(uuid "1a20f72f-4016-4ad8-bc21-c1fad590e7de")
 			(effects
@@ -13927,7 +13927,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "Rt4"
-			(at 0 4.502655 0)
+			(at 0 4.814999 0)
 			(layer "F.SilkS")
 			(uuid "d52b093a-bb6e-4550-865a-ed5206cecd87")
 			(effects
@@ -14120,7 +14120,7 @@
 		(descr "SOD-123")
 		(tags "SOD-123")
 		(property "Reference" "D_J9_BUSPWR"
-			(at 1.99869 1.99869 0)
+			(at -0.527254 -1.96774 0)
 			(layer "F.SilkS")
 			(uuid "9a65b1ec-7eaa-43c9-96d9-a41dd43005ad")
 			(effects
@@ -14395,7 +14395,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "R_HDP_PD"
-			(at 2.251328 3.899414 0)
+			(at 2.353478 2.353477 0)
 			(layer "F.SilkS")
 			(uuid "42dbc6b1-d582-4901-850c-ae9116847796")
 			(effects
@@ -14588,7 +14588,7 @@
 		(descr "SOT, 5 Pin (JEDEC MO-178 Var AA https://www.jedec.org/document_search?search_api_views_fulltext=MO-178), generated with kicad-footprint-generator ipc_gullwing_generator.py")
 		(tags "SOT TO_SOT_SMD")
 		(property "Reference" "U_ISNS"
-			(at 4.468899 1.197438 0)
+			(at 4.346666 2.509548 0)
 			(layer "F.SilkS")
 			(uuid "a05b674e-4d77-4f2d-a66f-1498d38af67a")
 			(effects
@@ -14927,7 +14927,7 @@
 		(descr "SMD pad as test Point, diameter 1.5mm")
 		(tags "test point SMD pad")
 		(property "Reference" "TP2"
-			(at -0.001254 -1.983177 0)
+			(at -0.001254 -2.096251 0)
 			(layer "F.SilkS")
 			(uuid "30283bcb-2c75-4dd3-8172-69ee4c0af0fa")
 			(effects
@@ -15024,7 +15024,7 @@
 		(descr "JST SH series connector, SM04B-SRSS-TB (http://www.jst-mfg.com/product/pdf/eng/eSH.pdf), generated with kicad-footprint-generator")
 		(tags "connector JST SH horizontal")
 		(property "Reference" "J_STEMMA"
-			(at 0 -5.309326 0)
+			(at 4.244239 -4.244238 0)
 			(layer "F.SilkS")
 			(uuid "609c364d-d087-4135-9047-a3960914ef20")
 			(effects
@@ -15300,6 +15300,17 @@
 			)
 		)
 	)
+	(gr_circle
+		(center 8.199999 10.655)
+		(end 8.35 10.655)
+		(stroke
+			(width 0.05)
+			(type default)
+		)
+		(fill yes)
+		(layer "F.SilkS")
+		(uuid "0a667ed6-c856-42b9-8049-3df7474577ce")
+	)
 	(gr_arc
 		(start 89 0)
 		(mid 91.12132 0.878679)
@@ -15384,6 +15395,28 @@
 		(layer "Edge.Cuts")
 		(uuid "bf88af8d-0697-49dc-af39-50484de71613")
 	)
+	(gr_text "G"
+		(at 61.14 60 0)
+		(layer "F.SilkS")
+		(uuid "087479f2-7aa7-4179-aee0-783009c5f40a")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "TX"
+		(at 59.26 12.9 0)
+		(layer "F.SilkS")
+		(uuid "09af115e-418a-4830-b6f3-4083c68e5a27")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
 	(gr_text "unplug while tracing"
 		(at 13.65 52.255 0)
 		(layer "F.SilkS")
@@ -15395,10 +15428,166 @@
 			)
 		)
 	)
+	(gr_text "VBUS DET"
+		(at 21 8.55 0)
+		(layer "F.SilkS")
+		(uuid "0f4e0bdd-808a-435b-a225-6822cdd18fc1")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "D+"
+		(at 61.675 14.6 0)
+		(layer "F.SilkS")
+		(uuid "170f4a4e-7ac7-4978-b5ad-4cfbc2baa7f2")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "G"
+		(at 64.34 12.9 0)
+		(layer "F.SilkS")
+		(uuid "1d920af4-da54-460b-8ac8-36915abc983d")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "PROBE"
+		(at 69.57 54.3 0)
+		(layer "F.SilkS")
+		(uuid "1f327f08-59cd-4333-a15f-a89fcac2f8fe")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "JTRACE"
+		(at 10.6 12.85 0)
+		(layer "F.SilkS")
+		(uuid "219c4343-af11-417d-a2a4-921d957f9082")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+			(justify right)
+		)
+	)
+	(gr_text "SWD"
+		(at 61.14 54.3 0)
+		(layer "F.SilkS")
+		(uuid "22568f62-9f5f-4750-b546-72720a894c69")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "USB DEV"
+		(at 88.86 39.5 0)
+		(layer "F.SilkS")
+		(uuid "2424b590-cc02-4997-b17e-49b0009626f3")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "USB HOST"
+		(at 80 11.6 0)
+		(layer "F.SilkS")
+		(uuid "243c0674-a223-4c74-86bf-49e7ae166b64")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "QT"
+		(at 48.1 7.7 0)
+		(layer "F.SilkS")
+		(uuid "37b7edef-2945-4852-a786-0eda1641144c")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "5V SEL"
+		(at 12.5 8.55 0)
+		(layer "F.SilkS")
+		(uuid "4b903c9c-5428-46b2-a0ef-2277302401f1")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "VBUS"
+		(at 14.4 12.85 0)
+		(layer "F.SilkS")
+		(uuid "62b0c70e-cb03-442b-b864-72f55114d221")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+			(justify left)
+		)
+	)
+	(gr_text "5V IN"
+		(at 29.4 7 0)
+		(layer "F.SilkS")
+		(uuid "63e45d26-4f87-4097-92fd-20bddc5709d2")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
 	(gr_text "REV A"
-		(at 38 35.6 0)
+		(at 64 4.3 0)
 		(layer "F.SilkS")
 		(uuid "6ce48950-7149-42a9-b99c-679ac1e9bb92")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "CLK"
+		(at 58.6 60 0)
+		(layer "F.SilkS")
+		(uuid "766a2fb5-dbf8-4c51-8dbd-a944250558c9")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "PICO2 TRACE MB"
+		(at 64 2 0)
+		(layer "F.SilkS")
+		(uuid "768db3e3-4ed4-4e67-9161-145449ca80c9")
 		(effects
 			(font
 				(size 1.2 1.2)
@@ -15406,13 +15595,90 @@
 			)
 		)
 	)
-	(gr_text "PICO2 TRACE MB"
-		(at 38 33 0)
+	(gr_text "IO"
+		(at 63.68 60 0)
 		(layer "F.SilkS")
-		(uuid "768db3e3-4ed4-4e67-9161-145449ca80c9")
+		(uuid "811d40c3-9684-4145-8576-4c426d1b4742")
 		(effects
 			(font
-				(size 1.5 1.5)
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "G"
+		(at 69.3 25.4 0)
+		(layer "F.SilkS")
+		(uuid "891191f6-d41c-4c74-a74c-f4b4b9b1eeba")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "GUARD GP0"
+		(at 3.5 50 0)
+		(layer "F.SilkS")
+		(uuid "9bcee180-b25e-405d-bdaa-3740664b0cd5")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "GUARD GP6"
+		(at 23.75 50 0)
+		(layer "F.SilkS")
+		(uuid "d15e5712-3aa7-40e3-95b8-6c2f4a20d1a4")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "ETM TRACE"
+		(at 14.89 54.3 0)
+		(layer "F.SilkS")
+		(uuid "e537d213-3c79-459a-a3a8-108899e88094")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "SWD"
+		(at 52.4 54.3 0)
+		(layer "F.SilkS")
+		(uuid "e780b558-b1b6-493b-bdba-2ecf61bc1663")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "RX"
+		(at 61.8 12.9 0)
+		(layer "F.SilkS")
+		(uuid "fcc5ea32-0b1c-4955-80d4-b635cd0625a2")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "D-"
+		(at 61.675 25.5 0)
+		(layer "F.SilkS")
+		(uuid "fec29a73-57e7-4163-b6de-1330d80eb683")
+		(effects
+			(font
+				(size 0.8 0.8)
 				(thickness 0.15)
 			)
 		)
@@ -15915,7 +16181,7 @@
 	)
 	(segment
 		(start 63.462 34.6)
-		(end 65.25 34.65)
+		(end 65.5 34.65)
 		(width 0.2)
 		(layer "F.Cu")
 		(net 7)
@@ -15995,7 +16261,7 @@
 	)
 	(via
 		(at 14.3 61.2)
-		(size 0.5)
+		(size 0.6)
 		(drill 0.3)
 		(layers "F.Cu" "B.Cu")
 		(net 7)
@@ -16034,8 +16300,8 @@
 		(uuid "2d412409-f617-4a05-aad4-19b92fc4f014")
 	)
 	(via
-		(at 65.25 34.65)
-		(size 0.5)
+		(at 65.5 34.65)
+		(size 0.6)
 		(drill 0.3)
 		(layers "F.Cu" "B.Cu")
 		(net 7)

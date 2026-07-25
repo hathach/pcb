@@ -362,6 +362,10 @@ def main(do_place: bool = False) -> None:
         # spot for every reference designator (must run after place.apply()
         # so it searches against final footprint positions).
         place.add_board_id_silk(b)
+        # Task 16: function-label legend, run *before* place_refs so the
+        # refdes collision search (which already treats existing F.SilkS
+        # board text as an obstacle) routes references around these labels.
+        place.add_function_labels(b)
         place.place_refs(b)
 
     b.SetCopperLayerCount(2)

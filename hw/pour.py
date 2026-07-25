@@ -160,11 +160,15 @@ _GND_STUBS = [
     ("F.Cu", (45.395, 15.6), (45.395, 23.11), 0.2),
     # PICO.23 <-> PICO.18: same column, extends the link across row1.
     ("F.Cu", (45.395, 23.11), (45.395, 40.89), 0.2),
-    # U_ISNS.2 <-> open F_Cu east of its 0.95mm-pitch column.
-    ("F.Cu", (63.462, 34.6), (65.25, 34.65), 0.2),
+    # U_ISNS.2 <-> open F_Cu east of its 0.95mm-pitch column. Task 16:
+    # endpoint nudged +0.25mm east (65.25->65.50) together with its via --
+    # see the via-position comment below for why "east" (not the brief's
+    # "west") is the direction with real DRC margin.
+    ("F.Cu", (63.462, 34.6), (65.50, 34.65), 0.2),
     # J3.9 (MIPI-20, 1.27mm pitch) <-> a via placed essentially in-pad --
-    # the only spot standard board-minimum via clearance (0.5mm dia)
-    # allows this close to the connector's own tight pitch.
+    # the only spot close to the connector's own tight pitch; same-net as
+    # the pad it lands in, so pad clearance doesn't apply (Task 16: grown
+    # to the board's standard 0.6mm/0.3mm size, DRC-clean up to >=1.2mm).
     ("F.Cu", (14.255, 61.15), (14.3, 61.2), 0.2),
     # PICO.3/J1B.3's own local F_Cu+B_Cu pocket (bbox inside the trace
     # corridor) isn't reached by the wider pour -- escapes north, just
@@ -226,22 +230,37 @@ _STITCH_VIAS_SPREAD = [
     (86.0, 6.0), (86.0, 14.0), (86.0, 22.0), (86.0, 30.0), (86.0, 38.0), (86.0, 54.0),
 ]
 
-# Pad-escape vias for three of the `_GND_STUBS` above (U_INA219_ALT.3/.7,
-# PICO.3/J1B.3's corridor-adjacent pocket) -- standard 0.6mm size, just
-# not part of the ring/fragment-fix/spread groups since they exist to
-# land a stub track, not to stitch a fragment.
-_STITCH_VIAS_PAD_ESCAPE = [(61.6, 27.975), (61.3, 28.625), (7.295, 39.5)]
+# Pad-escape vias for five of the `_GND_STUBS` above (U_INA219_ALT.3/.7,
+# PICO.3/J1B.3's corridor-adjacent pocket, J3.9, U_ISNS.2) -- standard
+# 0.6mm size, just not part of the ring/fragment-fix/spread groups since
+# they exist to land a stub track, not to stitch a fragment.
+#
+# J3.9 (14.3, 61.2) and U_ISNS.2 were originally undersized at the board's
+# 0.5mm/0.3mm DRC-floor size (Task 15) -- the only two vias on the board
+# below the standard 0.6mm/0.3mm size, both with < 0.15mm annular ring.
+# Task 16 grew both to the standard 0.6mm/0.3mm size:
+#   - J3.9: enlarged in place (14.3, 61.2 unchanged) -- DRC-clean at this
+#     spot up to >=1.2mm dia (same-net-as-pad, so pad clearance doesn't
+#     apply; nearest other-net copper is J3.11's pad, ~0.855mm away).
+#   - U_ISNS.2: enlarging in place at 65.25 passes DRC at *exactly* 0.600mm
+#     with zero margin (fails at 0.605mm) against the HOST_VBUS 0.5mm B_Cu
+#     track running x=64.500 y=[28.72,37.25] immediately to its west. DRC
+#     measurement (not the west-nudge originally suggested, which collides:
+#     the track's east edge is 64.75, only 0.25mm from the via's un-grown
+#     centre, so moving toward it shortens the gap and produces a
+#     `shorting_items` violation at 0.6mm) shows the real margin lies
+#     *east*: nudging the via to (65.50, 34.65) -- +0.25mm away from
+#     HOST_VBUS, toward the open gap before U_ISNS's own pads 4/5 at
+#     x=65.7375 -- keeps DRC clean up to 0.8mm dia (0.9mm is where pad 4,
+#     HOST_5V_IN, becomes the binding constraint instead), i.e. the 0.6mm
+#     target now has real margin on both sides. Its `_GND_STUBS` escape
+#     track was moved to the same new endpoint.
+_STITCH_VIAS_PAD_ESCAPE = [
+    (61.6, 27.975), (61.3, 28.625), (7.295, 39.5), (14.3, 61.2), (65.50, 34.65),
+]
 
 _STITCH_VIA_DIA_MM = 0.6
 _STITCH_VIA_DRILL_MM = 0.3
-
-# Pad-escape vias paired with two of the `_GND_STUBS` above, sized to the
-# board's DRC-enforced minimum (0.5mm dia / 0.3mm drill) -- the standard
-# 0.6mm via does not clear the tight copper around U_ISNS.2 / J3.9 even
-# from their own stub tracks' landing points.
-_STITCH_VIAS_MIN_SIZE = [(14.3, 61.2), (65.25, 34.65)]
-_MIN_VIA_DIA_MM = 0.5
-_MIN_VIA_DRILL_MM = 0.3
 
 
 def _has_gnd_via(board, gnd_netcode, x, y, tol=0.01):
@@ -273,16 +292,48 @@ def _add_stitching_vias(board):
         if _has_gnd_via(board, nc, x, y):
             continue
         _add_via_at(board, ni, x, y, _STITCH_VIA_DIA_MM, _STITCH_VIA_DRILL_MM)
-    for x, y in _STITCH_VIAS_MIN_SIZE:
-        if _has_gnd_via(board, nc, x, y):
-            continue
-        _add_via_at(board, ni, x, y, _MIN_VIA_DIA_MM, _MIN_VIA_DRILL_MM)
+
+
+# Task 16 migration: on the pre-Task-16 board file, J3.9's and U_ISNS.2's
+# vias (and U_ISNS.2's connecting stub track) already exist at their old
+# Task-15 spec (0.5mm/0.3mm; U_ISNS.2 at x=65.25). Mutates those existing
+# objects in place (never Remove/Add -- see PLAN.md's "Verified environment
+# facts") to the new spec above. On a board that doesn't have them yet
+# (a genuine from-scratch build), each inner loop simply finds nothing and
+# no-ops -- `_add_gnd_stubs`/`_add_stitching_vias` then create the new
+# geometry directly from the already-updated `_GND_STUBS`/
+# `_STITCH_VIAS_PAD_ESCAPE` tables. Either path converges on the same
+# final state.
+_LEGACY_MIN_VIAS_MIGRATION = [
+    # (old_x, old_y, new_x, new_y) -- J3.9 unchanged, U_ISNS.2 nudged east.
+    (14.3, 61.2, 14.3, 61.2),
+    (65.25, 34.65, 65.50, 34.65),
+]
+
+
+def _fix_legacy_min_vias(board):
+    ni = _net(board, "GND")
+    nc = ni.GetNetCode()
+    for old_x, old_y, new_x, new_y in _LEGACY_MIN_VIAS_MIGRATION:
+        for t in board.GetTracks():
+            if isinstance(t, pcbnew.PCB_VIA) and t.GetNetCode() == nc:
+                p = t.GetPosition()
+                if abs(pcbnew.ToMM(p.x) - old_x) < 0.01 and abs(pcbnew.ToMM(p.y) - old_y) < 0.01:
+                    t.SetPosition(_mm(new_x, new_y))
+                    t.SetWidth(pcbnew.F_Cu, pcbnew.FromMM(_STITCH_VIA_DIA_MM))
+                    t.SetDrill(pcbnew.FromMM(_STITCH_VIA_DRILL_MM))
+            elif isinstance(t, pcbnew.PCB_TRACK) and t.GetNetCode() == nc:
+                e = t.GetEnd()
+                ex, ey = pcbnew.ToMM(e.x), pcbnew.ToMM(e.y)
+                if abs(ex - old_x) < 0.01 and abs(ey - old_y) < 0.01:
+                    t.SetEnd(_mm(new_x, new_y))
 
 
 def add_pour(board):
     _add_gnd_zone(board, pcbnew.B_Cu)
     _add_gnd_zone(board, pcbnew.F_Cu)
     _apply_solid_overrides(board)
+    _fix_legacy_min_vias(board)
     _add_gnd_stubs(board)
     _add_stitching_vias(board)
 
