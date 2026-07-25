@@ -334,6 +334,11 @@ def main(do_place: bool = False) -> None:
     if do_place:
         place.apply(b)
         place.add_trace_silk(b)
+        # Task 14e: silkscreen polish -- board ID text + a collision-free
+        # spot for every reference designator (must run after place.apply()
+        # so it searches against final footprint positions).
+        place.add_board_id_silk(b)
+        place.place_refs(b)
 
     b.SetCopperLayerCount(2)
     _set_net_classes(b)

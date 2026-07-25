@@ -1,52 +1,75 @@
-"""Placement coordinate table for Task 14c (92x64 compaction + co-designed
-full placement).
+"""Placement coordinate table for Task 14e (re-placement for the SMT
+footprints introduced in Task 14d/14d-fix: PicoSocket_2x20_SMD with pads
+offset 1.65mm outward from the pin grid, J1B/J2B stock
+PinSocket_1x20_..._SMD_Pin1Left (zigzag +-1.65mm, symmetric about the row
+centre -- NOT pin-1-anchored like the old custom footprint), J5
+USB_A_Receptacle_GCT_USB1046, JP1-4/J_UART stock _SMD_Pin1Left headers.
+Every coordinate below was re-derived from the *actual* on-board courtyard/
+pad geometry (queried via pcbnew, not guessed) -- see
+.superpowers/sdd/task-14e-report.md for the derivation and the full
+region-by-region rationale.
 
 POS: dict[ref -> (x_mm, y_mm, rotation_deg)] for every PARTS ref except PICO
 (placed by build_board.py's `_place_pico`); MH1-4 are placed by
 `_add_mounting_holes` (inset from BOARD_W_MM/BOARD_H_MM).
 
 Coordinate frame: origin (0,0) top-left, mm, Y-down. Built against
-BOARD_W_MM=92, BOARD_H_MM=64 (build_board.py) -- PICO center y = 32, so its
-header rows land at y=22.61 (pads 21-40) and y=40.89 (pads 1-20); PICO
-courtyard x -1.0..52.94, y 20.415..43.585. Re-derive POS if the board size
-changes.
+BOARD_W_MM=92, BOARD_H_MM=64 (build_board.py) -- PICO center y = 32. With the
+new PicoSocket_2x20_SMD, its own pad rows sit at y=42.515 (pads 1-20) and
+y=21.435 (pads 21-40), pad-grid x 0.315..48.575 (centre x=24.445); courtyard
+x -1.0..49.89, y 20.19..43.81. Re-derive POS if the board size or any
+footprint changes.
 
-Vertical budget (why H=64, not the 62 the brief sketched): the bottom-side
-chain is rigid -- PICO courtyard bottom (H/2+11.585) + Rt row + J1B row +
-the trace bundle's meander/convergence band (J1B pad bottom +0.35 clear +
-meander room, ending >= 3.05+3.15 above J3's north pad row) + J3's 8.67mm
-courtyard + the 4-trunk SWD/NRESET/P3V3 B_Cu stack below the debug row
-(south pads +1.6, 3x0.9 spacing) + 0.3 copper-to-edge. Summing minima gives
-H >= H/2 + 31.18 -> H >= 62.4: 62 is infeasible without redesigning the
-Task-13 bundle convergence, 64 leaves ~0.8mm of real margin. Max dim is the
-92mm width -- under the 100mm JLC tier either way.
+Vertical budget (bottom-side chain, PICO courtyard bottom 43.81 -> board
+bottom 64, 20.19mm total): Rt row (1.95mm, hard against PICO) + 0.3mm gap +
+J1B (6.29mm, its real courtyard perpendicular width -- the stock zigzag
+footprint is ~3x fatter than Task 14c's custom outward-offset one) + 0.3mm
+gap + the debug row's 8.67mm courtyard (J3/J6, the tallest of the group) =
+17.31mm, leaving ~2.9mm to the board edge. This is why JP2/JP3 (each another
+6.17mm-tall band) do NOT fit as a 5th stacked band in this column -- see the
+JP2/JP3 note below for where they actually landed. Board width unchanged at
+92mm, under the 100mm JLC tier.
 
 Region notes (co-design against hw/route_trace.py, which reads all pad
-positions at runtime -- the two files are a matched pair):
-  - Left block keeps Task 12/13's relative geometry (trace bundle + SWD tree
-    re-derive identically): Rt row 44.8, J1B 47.8, J2B 15.6, debug row 55.8.
-    J3..SW1 shift +1.505mm east so J3's courtyard clears MH3's (mounting
-    holes track the corners). JP2/JP3 leave the debug row (no vertical room
-    above MH3) for the J1B->J3 gap band, rotated 0 at y 51.6, next to the
-    GP0/GP6 breakout columns they guard.
-  - Debug-row south pads sit at y 58.95; SWD trunks land at y 60.55..63.25.
-  - Top peripherals live in y<=13.7 (above J2B's courtyard): J8 (VBUS-in
-    micro-B) moved to the TOP edge next to JP4/JP1 -- VBUS_NET's members are
-    all in this corner, and the right edge cannot fit three connector bodies
-    with 10mm gaps in H=64. J5/J9 keep the right edge (mating faces at
-    x=92.15, >=10mm courtyard gap, MH2/MH4 cleared).
-  - Right-side clusters are ordered so destination rows match PICO-row
-    source order (kills Task 14's crossing conflicts): host D+/D- rows at
-    y 15.55/17.45 continue straight into ESD_H/J5's own pad rows; device
-    D+/D- rows at 43.75/45.65 match ESD_D/J9; the corridor columns at
-    x 52.0..56.9 and the B_Cu rims at y 12.3..14.35 are lane assignments in
-    route_trace.py, derived jointly with these coordinates.
+positions at runtime -- the two files are a matched pair; 14f re-derives its
+own lane constants against these coordinates):
+  - J1B/J2B: X-CENTRE MUST equal PICO's pad-grid centre (24.445) -- the stock
+    footprint's anchor is the row's geometric centre, not pin 1 (Task 14d-fix
+    kept the OLD custom-footprint anchor convention in the stale POS values,
+    which put J1B/J2B's pad columns ~22-26mm off from PICO's own columns,
+    part of J1B even landing off the left board edge). J1B sits outboard
+    (south) of PICO row1 at y=49.22; J2B outboard (north) of row2 at
+    y=16.745. Rt1-5 unchanged (already hard against PICO, no collision).
+  - JP2/JP3 (GP0/GP6 guard jumpers): do NOT fit in the J1B->debug-row gap (see
+    vertical-budget note above) or beside Rt1-5 (any Y-band spanning Rt's
+    columns is inside J1B's own 48mm-wide footprint) -- relocated east of
+    J1B's row-end, same Y-band as J1B (rot=0, minimises their Y-footprint),
+    at x=54.245/61.455 (JP3 also dropped 0.54mm to clear R_DPU, the device
+    cluster's nearest part). A longer GP0/GP6 guard trace in 14f is the
+    trade-off.
+  - Debug row (J3/J4/J6/J7): spaced >=10mm courtyard-to-courtyard (new hard
+    invariant -- plug-grip room), y=59.2. The vertical budget's ~2.7mm of
+    unused slack (board bottom 64 minus the row's minimum-gap position of
+    57.0) is spent here rather than left idle, opening a real gap between
+    J1B and the debug row for the "unplug while tracing" silk text (moved
+    from its old y=50.6, now inside J1B's much taller footprint, to
+    y=53.6). J3 x=14.89 keeps the PICO-pad-2 -> J3-pad-12 span well under
+    the 25mm target. SW1 (button, not a plug connector, exempt from the
+    10mm rule) trails at x=79.06 but drops further to y=59.955 -- its
+    shorter 7.49mm courtyard clears the device cluster's D_J9_BUSPWR above
+    it. C_NRESET rides just above SW1.
+  - Top peripherals (JP1/JP4/J8/J_STEMMA/LED pairs/R_NVD/J_UART) live in
+    y<=13.6 (above J2B's new courtyard top). J8/J_STEMMA (true cable
+    receptacles) keep >=10mm clear of each other; JP1/JP4/J_UART (vertical
+    pin headers, no rigid plug body) are not held to that rule but still
+    non-overlapping. JP1 shifted off the left edge and clear of MH1 (both
+    were a stale-position defect, not new-footprint growth).
+  - Host cluster (R_HDP/R_HDM/TP1/TP2/PDs/ESD_H) re-aligned to J5's real
+    pad rows (HOST_DP y=19.0, HOST_DM y=21.0 -- GCT1046's own pad geometry,
+    different from the old Molex-based assumption of 15.55/17.45).
   - TP1/TP2 sit symmetrically in-line on the host D+/D- rows (no stubs on
     data lines); TP3 (GND) taps the pour. J_TRACE_TP no longer exists
     (removed from the model -- stub-on-trace-net SI violation).
-  - The 5 parts Task 14b left at (0,0) are placed: R_HVEN_PD at U_HSW.EN,
-    C_NRESET beside SW1, U_INA219_ALT beside R_SHUNT (IN+/IN- facing it),
-    D_J9_BUSPWR between the J9 cluster and the VBUS_NET run.
 """
 
 from __future__ import annotations
@@ -67,58 +90,68 @@ POS: dict[str, tuple[float, float, float]] = {
     "Rt4": (14.915, 44.8, 90),
     "Rt5": (17.455, 44.8, 90),
 
-    # --- Breakout rows, pitch-aligned outboard of each PICO header row.
-    "J1B": (2.215, 47.8, 90),
-    "J2B": (50.475, 15.6, 270),
+    # --- Breakout rows: X-centre = PICO's pad-grid centre (24.445), so every
+    # pad lands directly outboard of its PICO/socket pad (stock footprint's
+    # anchor is the row centre, not pin 1 -- see module docstring).
+    "J1B": (24.445, 49.22, 90),
+    "J2B": (24.445, 16.745, 270),
 
-    # --- Guard jumpers: gap band between J1B and the debug row, beside the
-    # GP0 (x 2.215) / GP6 (x 22.535) breakout columns. JP3's x also keeps
-    # its pads >=0.45mm clear of VBUS_NET's F_Cu hop vias at x 20.3/22.3.
-    "JP2": (2.815, 51.6, 0),
-    "JP3": (25.0, 51.6, 0),
+    # --- Guard jumpers (GP0/GP6 -> GND): relocated east of J1B's row-end,
+    # same Y-band as J1B -- no vertical room remains beside Rt1-5 or in the
+    # J1B->debug-row gap now that J1B's real courtyard is 6.29mm tall (see
+    # module docstring's vertical-budget note).
+    "JP2": (54.245, 49.22, 0),
+    "JP3": (61.455, 49.76, 0),
 
-    # --- Debug connector row (y 55.8): +1.505mm east of the Task-12 xs so
-    # J3's courtyard clears MH3's; C_NRESET rides just above SW1.
-    "J3": (14.53, 55.8, 90),
-    "J4": (31.5, 55.8, 0),
-    "J6": (40.17, 55.8, 90),
-    "J7": (48.84, 55.8, 0),
-    "SW1": (58.83, 55.8, 0),
-    "C_NRESET": (58.83, 51.4, 0),
+    # --- Debug connector row (y 57.0): >=10mm courtyard-to-courtyard so a
+    # ribbon/JST plug can be gripped without fouling its neighbour. SW1
+    # trails the row but drops to y 59.955 (its courtyard is 1.18mm shorter
+    # than J3/J6's) to clear D_J9_BUSPWR above it; C_NRESET rides above SW1.
+    "J3": (14.89, 59.2, 90),
+    "J4": (35.23, 59.2, 0),
+    "J6": (52.4, 59.2, 90),
+    "J7": (69.57, 59.2, 0),
+    "SW1": (79.06, 59.955, 0),
+    "C_NRESET": (79.06, 55.395, 0),
 
-    # --- Top-left power corner: JP1/JP4 unchanged x, J8 on the top edge
-    # (mating face at y=-0.15), power LED pair west of JP4's pin column.
-    "JP1": (2.215, 11.0, 90),
-    "JP4": (12.0, 11.0, 90),
-    "J8": (17.0, 3.745, 180),
-    "LED_PWR": (10.2, 4.7, 270),
-    "R_LED_PWR": (10.2, 7.4, 90),
+    # --- Top-left power corner: JP1 shifted off the left edge (its SMD
+    # pads were spilling past Edge.Cuts at the old x=2.215) and clear of
+    # MH1 (below it, not beside); JP4 east of JP1; J8 on the top edge
+    # (mating face at y ~= -0.1); power LED pair between JP1 and JP4.
+    "JP1": (12.5, 9.0, 90),
+    "JP4": (21.0, 9.0, 90),
+    "J8": (29.4, 3.9, 180),
+    "LED_PWR": (4.0, 9.6, 270),
+    "R_LED_PWR": (4.0, 12.1, 90),
 
-    # --- Native-VBUS-detect divider, east of J_STEMMA's I2C feed columns
-    # (x 26.3/28.9) so NVD_TOP's B_Cu run and the divider tie stay clear.
-    "R_NVD_T": (30.8, 9.6, 90),
-    "R_NVD_B": (32.4, 9.6, 270),
+    # --- Native-VBUS-detect divider, east of J_STEMMA.
+    "R_NVD_T": (52.9, 9.0, 90),
+    "R_NVD_B": (54.5, 9.0, 270),
 
-    # --- Top peripherals: dest x ordered to match the PICO-row gap columns
-    # their nets emerge from (STEMMA 26.345/28.885, LED 33.965, UART
-    # 39.045/41.585, button x 53.52 = SW_USER pad 1L).
-    "J_STEMMA": (29.0, 3.4, 180),
-    "LED_USER": (33.965, 8.6, 270),
-    "R_LED_USER": (33.965, 11.6, 90),
-    "J_UART": (38.0, 11.0, 90),
-    "SW_USER": (57.5, 9.7, 0),
+    # --- Top peripherals: J_STEMMA >=10mm east of J8 (both real cable
+    # receptacles, y<=7.2 so J2B's X-range is irrelevant to either); JP1/
+    # JP4/J_UART (vertical headers, not held to the 10mm rule) all keep
+    # y-extent <=12.46, clear of J2B's y=13.6 top with margin regardless of
+    # x, so none of this row needs to dodge J2B's footprint horizontally.
+    "J_STEMMA": (48.1, 3.9, 180),
+    "LED_USER": (56.3, 8.6, 270),
+    "R_LED_USER": (56.3, 11.6, 90),
+    "J_UART": (61.8, 9.0, 90),
+    "SW_USER": (71.5, 7.5, 0),
 
-    # --- Host USB-A cluster: D+/D- rows y 15.55/17.45 run straight from
-    # the series Rs through in-line TPs into ESD_H's flow-through pads and
-    # on into J5.DP/DM; pulldowns tap vertically off the rows.
-    "R_HDP": (67.5, 15.55, 0),
-    "R_HDM": (67.5, 17.45, 0),
-    "TP1": (70.1, 13.4, 0),
-    "TP2": (70.1, 19.55, 0),
-    "R_HDP_PD": (72.3, 13.7, 90),
-    "R_HDM_PD": (72.3, 19.3, 270),
-    "ESD_H": (73.6, 16.5, 0),
-    "TP3": (74.35, 21.9, 0),
+    # --- Host USB-A cluster: re-aligned to J5's real GCT1046 pad rows
+    # (HOST_DP y=19.0, HOST_DM y=21.0 -- different from the old Molex-based
+    # assumption of 15.55/17.45). Series Rs -> in-line TPs -> pulldowns ->
+    # ESD_H's flow-through pads -> J5.DP/DM, all west of J5's own courtyard
+    # (L=69.32).
+    "R_HDP": (59.1, 19.0, 0),
+    "R_HDM": (59.1, 21.0, 0),
+    "TP1": (61.675, 16.5, 0),
+    "TP2": (61.675, 23.5, 0),
+    "R_HDP_PD": (63.79, 17.15, 90),
+    "R_HDM_PD": (63.79, 22.85, 270),
+    "ESD_H": (66.7, 20.0, 0),
+    "TP3": (67.45, 25.4, 0),
     "J5": (78.615, 20.0, 90),
 
     # --- Power cluster (shunt/current-sense/load-switch), x 60..79.
@@ -126,8 +159,8 @@ POS: dict[str, tuple[float, float, float]] = {
     "U_INA219_ALT": (61.5, 28.3, 180),
     "U_HSW": (64.5, 38.2, 0),
     "R_HVEN_PD": (65.64, 41.6, 270),
-    "C_HVBUS_100n": (70.0, 27.55, 270),
-    "C_HVBUS_BULK": (73.0, 27.62, 270),
+    "C_HVBUS_100n": (70.0, 29.2, 270),
+    "C_HVBUS_BULK": (73.0, 30.0, 270),
     "U_ISNS": (64.6, 34.6, 0),
 
     # --- Device micro-B cluster: D+/D- rows y 43.75/45.65 into ESD_D/J9;
@@ -138,16 +171,40 @@ POS: dict[str, tuple[float, float, float]] = {
     "ESD_D": (77.5, 44.7, 0),
     "R_J9VD_B": (80.9, 47.3, 270),
     "R_J9VD_T": (82.6, 47.3, 90),
-    "D_J9_BUSPWR": (77.7, 52.5, 180),
+    "D_J9_BUSPWR": (77.7, 50.5, 180),
     "J9": (88.255, 45.0, 90),
 }
 
 # Trace silk (G-4): warning text in the J1B -> debug-row gap, centered under
 # the GP1..GP5 breakout span.
 TRACE_SILK_TEXT = "unplug while tracing"
-TRACE_SILK_POS = (11.1, 50.6)
+TRACE_SILK_POS = (11.1, 53.6)
 TRACE_SILK_SIZE_MM = 1.0
 TRACE_SILK_THICKNESS_MM = 0.15
+
+# Board identification silk (Adafruit-practice pass, G-4): the Pico carrier's
+# own footprint (pico2_trace:PicoSocket_2x20_SMD) already carries a pin-1 dot
+# + "USB END" orientation label, so nothing extra is needed there. Placed in
+# the open corridor between the host/power clusters (nothing else lives at
+# x 50..60, y 30..40 -- that column is reserved for 14f's gap-crossing
+# routing lanes, which live on copper layers and don't conflict with silk).
+BOARD_NAME_TEXT = "PICO2 TRACE MB"
+BOARD_NAME_POS = (38.0, 33.0)
+BOARD_NAME_SIZE_MM = 1.5
+BOARD_REV_TEXT = "REV A"
+BOARD_REV_POS = (38.0, 35.6)
+BOARD_REV_SIZE_MM = 1.2
+BOARD_ID_THICKNESS_MM = 0.15
+
+# Reference-designator silk pass (Task 14e): every ref shrinks to a compact,
+# uniform size and is repositioned to the first collision-free spot found by
+# a radial search around its own footprint's courtyard, in preference order
+# N/NNE/NE/.../NNW (15-degree steps) x increasing standoff, tried at text
+# angle 0 then 90 -- see `place_refs`.
+REF_SIZE_MM = 0.8
+REF_THICK_MM = 0.15
+REF_SILK_CLEARANCE_MM = 0.15  # project's own board silk clearance rule is 0
+REF_EDGE_MARGIN_MM = 0.4  # keep ref text well clear of Edge.Cuts
 
 
 def _mm(x: float, y: float) -> "pcbnew.VECTOR2I":
@@ -188,3 +245,108 @@ def add_trace_silk(board) -> None:
     txt.SetTextSize(_mm(TRACE_SILK_SIZE_MM, TRACE_SILK_SIZE_MM))
     txt.SetTextThickness(_pcbnew.FromMM(TRACE_SILK_THICKNESS_MM))
     txt.SetPosition(_mm(*TRACE_SILK_POS))
+
+
+def add_board_id_silk(board) -> None:
+    """Add (or update in place) the board-name + revision F.SilkS texts.
+
+    Same reuse-by-exact-text idempotence pattern as `add_trace_silk`.
+    """
+    import pcbnew as _pcbnew
+
+    def _text(s, pos, size_mm):
+        existing = [
+            d for d in board.GetDrawings()
+            if isinstance(d, _pcbnew.PCB_TEXT) and d.GetText() == s
+        ]
+        txt = existing[0] if existing else _pcbnew.PCB_TEXT(board)
+        if not existing:
+            board.Add(txt)
+        txt.SetText(s)
+        txt.SetLayer(_pcbnew.F_SilkS)
+        txt.SetTextSize(_mm(size_mm, size_mm))
+        txt.SetTextThickness(_pcbnew.FromMM(BOARD_ID_THICKNESS_MM))
+        txt.SetPosition(_mm(*pos))
+
+    _text(BOARD_NAME_TEXT, BOARD_NAME_POS, BOARD_NAME_SIZE_MM)
+    _text(BOARD_REV_TEXT, BOARD_REV_POS, BOARD_REV_SIZE_MM)
+
+
+def _expand(bb: "pcbnew.BOX2I", mm: float) -> "pcbnew.BOX2I":
+    b2 = pcbnew.BOX2I(bb.GetPosition(), bb.GetSize())
+    b2.Inflate(pcbnew.FromMM(mm))
+    return b2
+
+
+def place_refs(board) -> None:
+    """Shrink every part's reference designator to REF_SIZE_MM and move it
+    to the first collision-free spot on a radial search around its own
+    footprint's courtyard (see the module-level constants above).
+
+    Deterministic + idempotent: refs are processed in a fixed (sorted)
+    order, each accepted placement becomes an obstacle for the refs after
+    it, and re-running from the same footprint positions retraces the same
+    search and lands on the same spot every time. MH1-4 (mounting holes,
+    no functional need to label) get their reference silk hidden instead.
+    """
+    import math
+
+    import pcbnew as _pcbnew
+
+    pad_obstacles = []
+    silk_obstacles = []
+    for fp in board.GetFootprints():
+        for pad in fp.Pads():
+            pad_obstacles.append(_expand(pad.GetBoundingBox(), REF_SILK_CLEARANCE_MM))
+        for item in fp.GraphicalItems():
+            if item.GetLayerName() == "F.Silkscreen":
+                silk_obstacles.append(_expand(item.GetBoundingBox(), REF_SILK_CLEARANCE_MM))
+    for d in board.GetDrawings():
+        if isinstance(d, _pcbnew.PCB_TEXT) and d.GetLayer() == _pcbnew.F_SilkS:
+            silk_obstacles.append(_expand(d.GetBoundingBox(), REF_SILK_CLEARANCE_MM))
+
+    m = REF_EDGE_MARGIN_MM
+    safe_area = _pcbnew.BOX2I(
+        _pcbnew.VECTOR2I(_pcbnew.FromMM(m), _pcbnew.FromMM(m)),
+        _pcbnew.VECTOR2I(_pcbnew.FromMM(92.0 - 2 * m), _pcbnew.FromMM(64.0 - 2 * m)),
+    )
+
+    dirs = [(math.cos(math.radians(a)), math.sin(math.radians(a))) for a in range(0, 360, 15)]
+    dists = [0.15, 0.4, 0.8, 1.3, 1.9, 2.6, 3.4, 4.3, 5.3]
+
+    placed_boxes = []
+    refs = sorted(fp.GetReference() for fp in board.GetFootprints() if not fp.GetReference().startswith("MH"))
+    for ref in refs:
+        fp = board.FindFootprintByReference(ref)
+        txt = fp.Reference()
+        txt.SetTextSize(_mm(REF_SIZE_MM, REF_SIZE_MM))
+        txt.SetTextThickness(_pcbnew.FromMM(REF_THICK_MM))
+        fp.BuildCourtyardCaches()
+        cy = fp.GetCourtyard(_pcbnew.F_CrtYd).BBox()
+        cx = _pcbnew.ToMM((cy.GetLeft() + cy.GetRight()) // 2)
+        ccy = _pcbnew.ToMM((cy.GetTop() + cy.GetBottom()) // 2)
+        diag = math.hypot(_pcbnew.ToMM(cy.GetWidth()) / 2.0, _pcbnew.ToMM(cy.GetHeight()) / 2.0)
+
+        found = False
+        bb = None
+        for angle in (0, 90):
+            txt.SetTextAngle(_pcbnew.EDA_ANGLE(angle, _pcbnew.DEGREES_T))
+            for dist in dists:
+                for dx, dy in dirs:
+                    txt.SetPosition(_mm(cx + dx * (diag + dist), ccy + dy * (diag + dist)))
+                    bb = txt.GetBoundingBox()
+                    if not safe_area.Contains(bb):
+                        continue
+                    if any(bb.Intersects(o) for o in pad_obstacles + silk_obstacles + placed_boxes):
+                        continue
+                    found = True
+                    break
+                if found:
+                    break
+            if found:
+                break
+        assert found, f"place_refs: no collision-free spot found for {ref!r}"
+        placed_boxes.append(_expand(bb, REF_SILK_CLEARANCE_MM))
+
+    for ref in ["MH1", "MH2", "MH3", "MH4"]:
+        board.FindFootprintByReference(ref).Reference().SetVisible(False)
