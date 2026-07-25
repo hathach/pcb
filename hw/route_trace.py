@@ -2272,6 +2272,80 @@ def _route_final_long_runs(board):
         _add_track(board, ni_sel2, pcbnew.B_Cu, [(15.5, 13.0), (12.5, 13.0)], w_default)
 
 
+def _widen_vbus_net(board):
+    """Task 15a: VBUS_NET was left at Default width (0.2mm) over two legs
+    Task 14i's power-trace widening pass (see its docstring above, and
+    task-14i-report.md) never touched: the whole PICO.40->JP1.3 leg (a
+    separate function, `_route_pico_no_jog`) and the x=33.965 vertical's
+    full 13.2mm span in `_route_final_long_runs` (deliberately left
+    narrow there, unsplit). Task 14i's rationale treated VBUS_NET as only
+    carrying the Pico's own 100-300mA; it does not -- JP1.3 sits on
+    VBUS_NET, so selecting USB on JP1 ties VBUS_SEL and VBUS_NET into the
+    same node, carrying the combined 650-760mA worst case VBUS_SEL was
+    already widened for. This mutates the existing Default-width track
+    objects in place (`SetWidth`/`SetStart`/`SetEnd` -- never
+    `BOARD.Remove()`), splitting only the one leg that crosses two pad
+    rows (J1B's row, y=47.8, and PICO's row1, y=40.89) into narrow-at-
+    crossing/wide-elsewhere bands, +-0.6mm half-width -- the same margin
+    already proven for J2B_HOP/ROW1_HOP (a via's own clearance need,
+    conservative for a bare track). DRC-verified clean (task-15-report.md).
+    The J8 final-drop neck and the four already-established via/row
+    crossing neck bands (ROW2_HOP, J2B_HOP, V5J_NECK_MM, SEL_HOP_NECK_MM)
+    are untouched -- still genuine clearance-forced pinch points, same
+    reasoning as VBUS_SEL's own remaining necks.
+
+    Idempotent: every segment is located by its known (start, end)
+    coordinates; a second run finds the already-widened/split geometry
+    and no-ops (the pre-split full-span track no longer exists once
+    shrunk, so its `find()` returns None)."""
+    ni = _net(board, "VBUS_NET")
+    nc = ni.GetNetCode()
+    w_net = _class_width(board, "VBUS_NET")
+    w_default = pcbnew.ToMM(
+        board.GetDesignSettings().m_NetSettings.GetDefaultNetclass().GetTrackWidth()
+    )
+
+    def find(layer, p0, p1):
+        for t in board.GetTracks():
+            if t.GetClass() == "PCB_VIA" or t.GetNetCode() != nc or t.GetLayer() != layer:
+                continue
+            s, e = t.GetStart(), t.GetEnd()
+            if (s == p0 and e == p1) or (s == p1 and e == p0):
+                return t
+        return None
+
+    # Simple full-widen: DRC-confirmed no obstacle within Power-class
+    # clearance of any of these at 0.5mm -- left at Default width
+    # incidentally (not for a genuine clearance reason).
+    for x0, y0, x1, y1 in [
+        (2.215, 23.11, 2.215, 8.0),     # PICO.40 vertical
+        (2.215, 8.0, 15.04, 8.0),       # peel-off row north of JP1
+        (15.04, 8.0, 15.04, 10.655),    # JP1.3 final approach (PICO.40 leg)
+        (15.04, 9.3, 15.04, 10.655),    # JP1.3 final approach (D_J9_BUSPWR leg)
+        (16.185, 9.3, 15.04, 9.3),      # D_J9_BUSPWR leg's westward jog
+        (33.965, 36.0, 31.0, 36.0),     # D_J9_BUSPWR leg's row-gap exit
+        (15.5, 36.0, 16.185, 36.0),     # F_Cu/B_Cu layer-hop stub
+    ]:
+        t = find(pcbnew.B_Cu, _mm(x0, y0), _mm(x1, y1))
+        if t is not None and pcbnew.ToMM(t.GetWidth()) < w_net:
+            t.SetWidth(pcbnew.FromMM(w_net))
+
+    # x=33.965 vertical (49.2->36.0): crosses J1B's row (47.8) AND PICO's
+    # row1 (40.89) -- split into wide/narrow/wide/narrow/wide.
+    j1b_lo, j1b_hi = 47.8 - 0.6, 47.8 + 0.6
+    row1_lo, row1_hi = 40.89 - 0.6, 40.89 + 0.6
+    p_top, p_bot = _mm(33.965, 49.2), _mm(33.965, 36.0)
+    full = find(pcbnew.B_Cu, p_top, p_bot)
+    if full is not None:
+        full.SetStart(p_top)
+        full.SetEnd(_mm(33.965, j1b_hi))
+        full.SetWidth(pcbnew.FromMM(w_net))
+        _add_track(board, ni, pcbnew.B_Cu, [(33.965, j1b_hi), (33.965, j1b_lo)], w_default)
+        _add_track(board, ni, pcbnew.B_Cu, [(33.965, j1b_lo), (33.965, row1_hi)], w_net)
+        _add_track(board, ni, pcbnew.B_Cu, [(33.965, row1_hi), (33.965, row1_lo)], w_default)
+        _add_track(board, ni, pcbnew.B_Cu, [(33.965, row1_lo), (33.965, 36.0)], w_net)
+
+
 def main():
     """Task 14f scope actually completed: trace bundle, guard nets, the
     SWD/NRESET/P3V3(VTref) tree, breakout stubs, and internal ties -- all
@@ -2301,6 +2375,7 @@ def main():
     _route_pico_no_jog(b)
     _route_pico_row_jog(b)
     _route_final_long_runs(b)
+    _widen_vbus_net(b)
 
     pcbnew.SaveBoard(BOARD_FILE, b)
     pcbnew.GetSettingsManager().SaveProject()
