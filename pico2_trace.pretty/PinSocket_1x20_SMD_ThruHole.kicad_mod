@@ -1,0 +1,331 @@
+(footprint "PinSocket_1x20_SMD_ThruHole"
+	(version 20241229)
+	(generator "pico2_trace/hw/gen_sockets.py")
+	(layer "F.Cu")
+	(descr "SMT 1x20 2.54mm female socket strip (breakout row), pad numbering \"1\"..\"20\" matches stock PinSocket_1x20_P2.54mm_Vertical; NPTH clearance holes at the nominal pin grid pass a plugged male pin through the board. Grid derived from PinSocket_1x20_P2.54mm_Vertical.kicad_mod.")
+	(tags "pin socket SMD 1x20 2.54mm THT elimination")
+	(property "Reference" "REF**"
+		(at 0 -2.77 0)
+		(layer "F.SilkS")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "PinSocket_1x20_SMD_ThruHole"
+		(at 0 51.03 0)
+		(layer "F.Fab")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr smd)
+	(fp_line
+		(start -2.475 -0.97)
+		(end 0.9 -0.97)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start 0.9 -0.97)
+		(end 0.9 49.23)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start 0.9 49.23)
+		(end -2.475 49.23)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start -2.475 49.23)
+		(end -2.475 -0.97)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_circle
+		(center -2.575 0)
+		(end -2.325 0)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(fill solid)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start -2.475 -1.27)
+		(end 0.3 -1.27)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start 0.3 -1.27)
+		(end 0.3 49.53)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start 0.3 49.53)
+		(end -2.475 49.53)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start -2.475 49.53)
+		(end -2.475 -1.27)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(pad "1" smd rect
+		(at -1.675 0)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 0)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(pad "2" smd rect
+		(at -1.675 2.54)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 2.54)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(pad "3" smd rect
+		(at -1.675 5.08)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 5.08)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(pad "4" smd rect
+		(at -1.675 7.62)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 7.62)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(pad "5" smd rect
+		(at -1.675 10.16)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 10.16)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(pad "6" smd rect
+		(at -1.675 12.7)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 12.7)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(pad "7" smd rect
+		(at -1.675 15.24)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 15.24)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(pad "8" smd rect
+		(at -1.675 17.78)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 17.78)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(pad "9" smd rect
+		(at -1.675 20.32)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 20.32)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(pad "10" smd rect
+		(at -1.675 22.86)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 22.86)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(pad "11" smd rect
+		(at -1.675 25.4)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 25.4)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(pad "12" smd rect
+		(at -1.675 27.94)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 27.94)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(pad "13" smd rect
+		(at -1.675 30.48)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 30.48)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(pad "14" smd rect
+		(at -1.675 33.02)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 33.02)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(pad "15" smd rect
+		(at -1.675 35.56)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 35.56)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(pad "16" smd rect
+		(at -1.675 38.1)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 38.1)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(pad "17" smd rect
+		(at -1.675 40.64)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 40.64)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(pad "18" smd rect
+		(at -1.675 43.18)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 43.18)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(pad "19" smd rect
+		(at -1.675 45.72)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 45.72)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(pad "20" smd rect
+		(at -1.675 48.26)
+		(size 1 2.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+	)
+	(pad "" np_thru_hole circle
+		(at 0 48.26)
+		(size 1.15 1.15)
+		(drill 1.15)
+		(layers "*.Mask")
+	)
+	(embedded_fonts no)
+)
