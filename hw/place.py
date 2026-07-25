@@ -274,6 +274,17 @@ REF_THICK_MM = 0.15
 REF_SILK_CLEARANCE_MM = 0.15  # project's own board silk clearance rule is 0
 REF_EDGE_MARGIN_MM = 0.4  # keep ref text well clear of Edge.Cuts
 
+# Task 16b: the one genuinely crowded region on the board (per the task-16
+# report's "6/52 refs >3mm from their own courtyard" finding) -- the Rt
+# source-resistor row wedged hard against PICO/J1B, plus its two
+# neighbouring two-part clusters that share the same tight real estate
+# (R_LED_PWR/LED_PWR in the top-left corner, R_NVD_T/R_NVD_B east of
+# J_STEMMA). `place_refs` places this set first (worst static crowding
+# first), ahead of the other 43 refs, which keep their original
+# alphabetical order -- see `place_refs`'s docstring for why the reorder is
+# scoped to just this cluster instead of a full 52-ref reorder.
+_CROWDED_CLUSTER = ["Rt1", "Rt2", "Rt3", "Rt4", "Rt5", "R_LED_PWR", "LED_PWR", "R_NVD_T", "R_NVD_B"]
+
 
 def _mm(x: float, y: float) -> "pcbnew.VECTOR2I":
     return pcbnew.VECTOR2I(pcbnew.FromMM(x), pcbnew.FromMM(y))
@@ -356,6 +367,15 @@ def add_board_id_silk(board) -> None:
 FUNC_LABEL_SIZE_MM = 0.8
 FUNC_LABEL_THICK_MM = 0.15
 
+# Task 16b fix: KiCad's silk_edge_clearance DRC rule only evaluates
+# PCB_SHAPE items against Edge.Cuts, never PCB_TEXT glyph geometry -- so a
+# hand-placed label (like "GUARD GP0" above, which overhung the left board
+# edge by 0.093mm) has no automated gate. `place_refs` already solves this
+# for reference designators with a `safe_area` clamp; give function labels
+# the same one, at the board's copper-to-edge margin (matches hw/pour.py's
+# 0.3mm zone inset) rather than place_refs' own 0.4mm ref-specific margin.
+FUNC_LABEL_EDGE_MARGIN_MM = 0.3
+
 FUNC_LABELS: list[tuple[str, float, float, int]] = [
     # JP1 (5V source selector): title + pin-1/pin-3 end labels. Pin 1 =
     # V5_JTRACE, pin 2 = VBUS_SEL (common), pin 3 = VBUS_NET; shunt 1-2 =
@@ -394,6 +414,27 @@ JP1_PIN1_MARKER_POS = (8.2, 10.655)
 JP1_PIN1_MARKER_RADIUS_MM = 0.15
 
 
+def _clamp_text_to_safe_area(txt, safe_area) -> None:
+    """Shift `txt`'s position (preserving its size/angle/justify) so its
+    glyph bounding box lies fully inside `safe_area`. A no-op if the text
+    is already inside. See `FUNC_LABEL_EDGE_MARGIN_MM`'s docstring for why
+    this exists -- DRC does not check this for PCB_TEXT."""
+    import pcbnew as _pcbnew
+
+    bb = txt.GetBoundingBox()
+    dx = dy = 0
+    if bb.GetLeft() < safe_area.GetLeft():
+        dx = safe_area.GetLeft() - bb.GetLeft()
+    elif bb.GetRight() > safe_area.GetRight():
+        dx = safe_area.GetRight() - bb.GetRight()
+    if bb.GetTop() < safe_area.GetTop():
+        dy = safe_area.GetTop() - bb.GetTop()
+    elif bb.GetBottom() > safe_area.GetBottom():
+        dy = safe_area.GetBottom() - bb.GetBottom()
+    if dx or dy:
+        txt.SetPosition(txt.GetPosition() + _pcbnew.VECTOR2I(dx, dy))
+
+
 def add_function_labels(board) -> None:
     """Add (or update in place) every connector/jumper function label in
     `FUNC_LABELS`, plus JP1's pin-1 marker dot.
@@ -403,6 +444,10 @@ def add_function_labels(board) -> None:
     at different positions, so a text-only match (as `add_trace_silk`/
     `add_board_id_silk` use, safe there since those strings are unique)
     would conflate them.
+
+    Task 16b: every placed/updated text is clamped inside a board-edge
+    safe area (`_clamp_text_to_safe_area`) before this function returns --
+    see `FUNC_LABEL_EDGE_MARGIN_MM`.
     """
     import pcbnew as _pcbnew
 
@@ -412,6 +457,12 @@ def add_function_labels(board) -> None:
         _pcbnew.GR_TEXT_H_ALIGN_RIGHT,
     )
     justify_map = {0: H, 1: L, 2: R}
+
+    m = FUNC_LABEL_EDGE_MARGIN_MM
+    safe_area = _pcbnew.BOX2I(
+        _pcbnew.VECTOR2I(_pcbnew.FromMM(m), _pcbnew.FromMM(m)),
+        _pcbnew.VECTOR2I(_pcbnew.FromMM(92.0 - 2 * m), _pcbnew.FromMM(64.0 - 2 * m)),
+    )
 
     def _existing_text(text, x, y, tol=1.0):
         for d in board.GetDrawings():
@@ -432,6 +483,7 @@ def add_function_labels(board) -> None:
         txt.SetTextThickness(_pcbnew.FromMM(FUNC_LABEL_THICK_MM))
         txt.SetPosition(_mm(x, y))
         txt.SetHorizJustify(justify_map[justify_code])
+        _clamp_text_to_safe_area(txt, safe_area)
 
     mk = None
     mx, my = JP1_PIN1_MARKER_POS
@@ -487,6 +539,30 @@ def place_refs(board) -> None:
     place it. If no direction/distance in the ladder is collision-free
     (should not happen in practice -- see the report), the ref is hidden
     (`SetVisible(False)`) rather than exiled across the board.
+
+    Task 16b fix: refs used to be processed in plain alphabetical order, so
+    in a genuinely crowded corridor (Rt2-Rt5/J1B, and the R_LED_PWR/
+    LED_PWR corner) whichever ref happened to sort first claimed the
+    nearest free spot even when it had many equally-good alternatives,
+    pushing a later, equally- or more-constrained ref further out once its
+    neighbours were already obstacles (6/52 refs ended up >3mm from their
+    own courtyard -- see task-16 report). The search itself is unchanged;
+    only the processing order changes, and only for that known corridor:
+    `_CROWDED_CLUSTER` (the Rt row + its two neighbouring clusters) is
+    placed first -- ordered worst-static-crowding-first via the same ray
+    search run against just the static board obstacles (pads + existing
+    silk, i.e. how tight this ref's neighbourhood is on its own, before
+    any ref text exists) -- so those refs get first claim on the corridor's
+    scarce room. Every other ref keeps its original alphabetical relative
+    order and runs after, unchanged.
+
+    A full global reorder (every ref by static-crowding score) was tried
+    first and rejected: it fixed the 6 flagged refs but, by reshuffling
+    *all* 52 refs' relative order, silently pushed an unrelated ref
+    (R_HDM_PD, in the host-cluster corner) from comfortably under 1mm to
+    3.86mm -- worse than any single offender it fixed. Scoping the reorder
+    to the one genuinely crowded corridor avoids touching placement order
+    anywhere else on the board.
     """
     import math
 
@@ -513,24 +589,12 @@ def place_refs(board) -> None:
     dirs = [(math.cos(math.radians(a)), math.sin(math.radians(a))) for a in range(0, 360, 15)]
     dists = [0.15, 0.4, 0.8, 1.3, 1.9, 2.6, 3.4, 4.3, 5.3]
 
-    placed_boxes = []
-    relocated = []
-    omitted = []
-    refs = sorted(fp.GetReference() for fp in board.GetFootprints() if not fp.GetReference().startswith("MH"))
-    for ref in refs:
-        fp = board.FindFootprintByReference(ref)
-        txt = fp.Reference()
-        txt.SetTextSize(_mm(REF_SIZE_MM, REF_SIZE_MM))
-        txt.SetTextThickness(_pcbnew.FromMM(REF_THICK_MM))
-        fp.BuildCourtyardCaches()
-        cy = fp.GetCourtyard(_pcbnew.F_CrtYd).BBox()
-        cx = _pcbnew.ToMM((cy.GetLeft() + cy.GetRight()) // 2)
-        ccy = _pcbnew.ToMM((cy.GetTop() + cy.GetBottom()) // 2)
-        half_w = _pcbnew.ToMM(cy.GetWidth()) / 2.0
-        half_h = _pcbnew.ToMM(cy.GetHeight()) / 2.0
-
-        found = False
-        bb = None
+    def _search(txt, cx, ccy, half_w, half_h, obstacles):
+        """Unchanged ray search: try each angle/distance/direction rung in
+        order, return (bbox, dist_rung) of the first spot inside
+        `safe_area` that clears every obstacle in `obstacles`, or
+        (None, None) if the whole ladder is exhausted. Leaves `txt`
+        positioned at the returned (or last-tried) spot."""
         for angle in (0, 90):
             txt.SetTextAngle(_pcbnew.EDA_ANGLE(angle, _pcbnew.DEGREES_T))
             for dist in dists:
@@ -546,16 +610,47 @@ def place_refs(board) -> None:
                     bb = txt.GetBoundingBox()
                     if not safe_area.Contains(bb):
                         continue
-                    if any(bb.Intersects(o) for o in pad_obstacles + silk_obstacles + placed_boxes):
+                    if any(bb.Intersects(o) for o in obstacles):
                         continue
-                    found = True
-                    break
-                if found:
-                    break
-            if found:
-                break
+                    return bb, dist
+        return None, None
 
-        if found:
+    refs0 = sorted(fp.GetReference() for fp in board.GetFootprints() if not fp.GetReference().startswith("MH"))
+
+    def _courtyard_geom(ref):
+        fp = board.FindFootprintByReference(ref)
+        txt = fp.Reference()
+        txt.SetTextSize(_mm(REF_SIZE_MM, REF_SIZE_MM))
+        txt.SetTextThickness(_pcbnew.FromMM(REF_THICK_MM))
+        fp.BuildCourtyardCaches()
+        cy = fp.GetCourtyard(_pcbnew.F_CrtYd).BBox()
+        cx = _pcbnew.ToMM((cy.GetLeft() + cy.GetRight()) // 2)
+        ccy = _pcbnew.ToMM((cy.GetTop() + cy.GetBottom()) // 2)
+        half_w = _pcbnew.ToMM(cy.GetWidth()) / 2.0
+        half_h = _pcbnew.ToMM(cy.GetHeight()) / 2.0
+        return fp, txt, cx, ccy, half_w, half_h
+
+    # Crowding pre-pass (Task 16b, scoped to the known-crowded corridor --
+    # see docstring): rank _CROWDED_CLUSTER by static-obstacles-only score,
+    # worst first, and place that cluster ahead of everyone else. Every
+    # other ref keeps its original alphabetical order, unchanged.
+    static_obstacles = pad_obstacles + silk_obstacles
+    scores: dict[str, float] = {}
+    for ref in _CROWDED_CLUSTER:
+        _, txt, cx, ccy, half_w, half_h = _courtyard_geom(ref)
+        _, dist = _search(txt, cx, ccy, half_w, half_h, static_obstacles)
+        scores[ref] = dist if dist is not None else math.inf
+    priority = sorted((r for r in refs0 if r in scores), key=lambda r: (-scores[r], r))
+    refs = priority + [r for r in refs0 if r not in scores]
+
+    placed_boxes = []
+    relocated = []
+    omitted = []
+    for ref in refs:
+        fp, txt, cx, ccy, half_w, half_h = _courtyard_geom(ref)
+        bb, _dist = _search(txt, cx, ccy, half_w, half_h, static_obstacles + placed_boxes)
+
+        if bb is not None:
             placed_boxes.append(_expand(bb, REF_SILK_CLEARANCE_MM))
             relocated.append(ref)
         else:

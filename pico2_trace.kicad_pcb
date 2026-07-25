@@ -3874,7 +3874,7 @@
 		(descr "LED SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: http://www.tortai-tech.com/upload/download/2011102023233369053.pdf), generated with kicad-footprint-generator")
 		(tags "LED")
 		(property "Reference" "LED_PWR"
-			(at -2.780704 0.745088 0)
+			(at 1.097446 1.900834 90)
 			(layer "F.SilkS")
 			(uuid "d4f2e397-3d8f-4fbe-9ec8-47fe95e1fcd7")
 			(effects
@@ -4621,7 +4621,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "Rt5"
-			(at -5.274999 0 0)
+			(at 0 4.814999 0)
 			(layer "F.SilkS")
 			(uuid "08d2c43f-03e2-49d9-9676-cb9bb729b3dd")
 			(effects
@@ -7656,7 +7656,7 @@
 		(descr "Through hole straight socket strip, 1x20, 2.54mm pitch, single row (from Kicad 4.0.7), script generated")
 		(tags "Through hole socket strip THT 1x20 2.54mm single row")
 		(property "Reference" "J1B"
-			(at 2.360686 21.714314 0)
+			(at 2.487821 22.649222 0)
 			(layer "F.SilkS")
 			(uuid "e7069c85-98e8-4df3-b160-a17015f299f9")
 			(effects
@@ -8066,7 +8066,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "R_LED_USER"
-			(at -1.858502 -1.858503 0)
+			(at -3.575 0 0)
 			(layer "F.SilkS")
 			(uuid "12f60013-0262-4ae1-975f-bcf4244552e4")
 			(effects
@@ -8355,7 +8355,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "R_NVD_T"
-			(at 5.128482 1.374172 0)
+			(at -3.575 0 0)
 			(layer "F.SilkS")
 			(uuid "b6402d57-56a0-43a2-8b8d-dea9cd0711a7")
 			(effects
@@ -10493,7 +10493,7 @@
 		(descr "Resistor SMD 0402 (1005 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "R_LED_PWR"
-			(at -6.094406 1.632991 0)
+			(at 5.275 -0.000001 0)
 			(layer "F.SilkS")
 			(uuid "67fe5333-b646-4b9b-8bf8-5e899cb598a0")
 			(effects
@@ -15618,7 +15618,7 @@
 		)
 	)
 	(gr_text "GUARD GP0"
-		(at 3.5 50 0)
+		(at 3.892619 50 0)
 		(layer "F.SilkS")
 		(uuid "9bcee180-b25e-405d-bdaa-3740664b0cd5")
 		(effects
