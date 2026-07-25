@@ -31,7 +31,6 @@ FP = {
     # Added in Task 3 for honest DNP-part footprints (both verified present
     # under /usr/share/kicad/footprints/ before use):
     "sod123": ("Diode_SMD", "D_SOD-123"),                                    # D_J9_BUSPWR (DNP)
-    "hdr_1x06": ("Connector_PinHeader_2.54mm", "PinHeader_1x06_P2.54mm_Vertical"),  # J_TRACE_TP (DNP)
     # Task 14b: real INA219 footprint (verified present on disk), replacing
     # the earlier "isense" (SOT-23-5) stand-in now that U_INA219_ALT is
     # realized Adafruit-style (footprint present + wired + dnp=True).

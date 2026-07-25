@@ -28,14 +28,13 @@ SYSTEM_FP_ROOT = "/usr/share/kicad/footprints"
 PROJECT_FP_DIR = "pico2_trace.pretty"
 
 # Task 11: board outline + mounting holes + Pico socket edge placement.
-# Task 12: grown from the Task-11 65x34 placeholder -- 65x34 has no room for
-# the 47 remaining footprints (5 trace resistors, two 1x20 breakout rows, the
-# 4-connector debug group, the USB-host/device clusters, ...) once J1B/J2B
-# and the debug connectors need real outboard space below/above the Pico
-# header rows. hw/place.py's POS table was derived against this exact size
-# (see its module docstring) -- re-derive POS if this changes.
-BOARD_W_MM = 110.0
-BOARD_H_MM = 78.0
+# Task 12 grew the Task-11 65x34 placeholder to 110x78; Task 14c compacted
+# it to 92x64 (JLC <=100mm price tier; H=64 is the honest floor for the
+# bottom-side stack -- see hw/place.py's module docstring for the budget
+# math). hw/place.py's POS table and hw/route_trace.py's lane/rim constants
+# were derived against this exact size -- re-derive both if this changes.
+BOARD_W_MM = 92.0
+BOARD_H_MM = 64.0
 CORNER_R_MM = 3.0
 
 # 4x M3 mounting holes, inset ~4 mm from each edge/corner (netless).

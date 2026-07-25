@@ -1,0 +1,12 @@
+(version 1)
+
+# U_INA219_ALT (SOT-23-8, DNP): the stock KiCad SOT-23-8 land pattern has
+# 0.65mm pad pitch with 0.5mm pad width -> 0.15mm pad-to-pad air gap, below
+# the project's 0.2mm netclass clearance. That gap is fixed footprint
+# geometry (fab-capable: JLC 2-layer min spacing is 0.127mm), not a routing
+# error -- scope a footprint-local clearance floor so DRC checks the pads
+# against what the land pattern can actually provide. Applies only when
+# BOTH items belong to this footprint; everything else keeps 0.2mm.
+(rule ina219_sot23_8_pad_pitch
+  (condition "A.memberOfFootprint('U_INA219_ALT') && B.memberOfFootprint('U_INA219_ALT')")
+  (constraint clearance (min 0.13mm)))

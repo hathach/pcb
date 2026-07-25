@@ -321,6 +321,10 @@
         "pattern": "HOST_VBUS"
       },
       {
+        "netclass": "Power",
+        "pattern": "J9_VBUS"
+      },
+      {
         "netclass": "Trace",
         "pattern": "TRACECLK"
       },
@@ -347,10 +351,6 @@
       {
         "netclass": "Power",
         "pattern": "HOST_5V_IN"
-      },
-      {
-        "netclass": "Power",
-        "pattern": "J9_VBUS"
       }
     ]
   },

@@ -233,8 +233,13 @@ _add(Part(
 ))
 # D_J9_BUSPWR: optional J9-VBUS -> VBUS_NET bus-power diode (DESIGN SS8.2/SS14).
 _add(Part("D_J9_BUSPWR", "1N4148W", "sod123", _pins("1", "2"), dnp=True))
-# J_TRACE_TP: optional 1x6 100-mil test header on the five trace nets + GND.
-_add(Part("J_TRACE_TP", "TRACE_TP", "hdr_1x06", _numbered(6), dnp=True))
+# J_TRACE_TP: REMOVED in Task 14c (SI ruling). Its pads sat directly on
+# TRACECLK/TD0-3 -- as a DNP header hanging off the length-matched bundle it
+# is a stub on every SI-critical net, which DESIGN SS5.4 forbids ("no other
+# loading"). Routing the bundle *through* its pads (the stubless alternative)
+# would have put six 1.7mm THT pads inside the tuned convergence and forced a
+# total re-derivation for no populated-board benefit. Removal was
+# pre-authorized by the Task 14c brief.
 
 
 # --------------------------------------------------------------------------
@@ -514,22 +519,6 @@ PARTS["J8"].pins["6"] = "GND"
 # J9 ID (DESIGN SS8.2: self-powered, detect-only device port -- no OTG role
 # for this connector): genuinely unused, no-connect.
 PARTS["J9"].nc |= {"4"}
-
-# J_TRACE_TP (DNP, DESIGN SS14: "optional DNP 1x6 100-mil test header on the
-# five trace nets" + GND to fill the 1x6): Task 3 added the part but never
-# wired it, leaving all 6 pads bare -- a wiring bug, not a legitimate nc
-# (nothing in DESIGN marks this header's pins as intentionally unused).
-# Wired here following the same precedent as D_J9_BUSPWR: an optional DNP
-# part still gets real net assignments to document what it's for; the `dnp`
-# flag alone (not nc) is what keeps it out of the bridging helpers (dnp parts
-# never bridge two nets, see `_resistor_pair`) -- as of Task 14b, `dnp` no
-# longer excludes a part from `emit_netlist`'s output (see that function).
-# Pin order is arbitrary (generic header, no datasheet constraint): trace bus
-# order, GND last.
-PARTS["J_TRACE_TP"].pins.update({
-    "1": "TRACECLK", "2": "TD0", "3": "TD1", "4": "TD2", "5": "TD3", "6": "GND",
-})
-
 
 # --------------------------------------------------------------------------
 # Task 14b: model pass -- Adafruit-style DNP realization (footprint present +
