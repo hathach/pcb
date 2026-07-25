@@ -83,7 +83,7 @@ Both JST-SH 3-pin, pinout **SWCLK / GND / SWDIO** (Raspberry Pi debug standard).
 ### 5.4 Trace signal integrity
 
 - **Source series termination 27 Ω** (0402) on TRACECLK + TRACEDATA0–3, placed at the Pico socket pins (the breakout tap is on the socket-side of Rterm, so Rterm isolates it from the line).
-- Traces ≈ 0.3 mm, **runs < 30 mm**, CLK↔data length-matched within a few mm, no stubs. Not chasing exact 50 Ω (impractical on 2-layer 1.6 mm); solid bottom GND + short length + source termination is sufficient for the V2 40 MHz cliff and good for V3.
+- Traces ≈ 0.3 mm, **runs < 30 mm**, CLK↔data length-matched within a few mm, no stubs. Not chasing exact 50 Ω (impractical on 2-layer 1.6 mm); solid bottom GND + short length + source termination is sufficient for the J-Trace PRO V2's full 150 MHz TRACECLK rating — the ~40 MHz cliff recorded against the original fly-wire rig was a fly-wire signal-integrity limit, not a V2 hardware limit (see `docs/BRINGUP.md` "Trace bring-up ladder").
 - GND stitching vias around the trace group. MIPI-20 within ~3 cm of the socket.
 - **GP1–GP5 carry nothing else** — no pulls, LEDs, or loading beyond a via/breakout. The five outer breakout females for GP1–GP5 are silk-marked **"unplug while tracing"** (a wire there is a fat antenna on a 40–75 MHz line).
 - **Guard pins:** GP0 (pin 1, directly against TRACECLK, no GND between) and GP6 (pin 9) each have a 2-pin **removable jumper to GND** (JP2/JP3, default fitted). Fitted = grounded guard (GND on both sides of TRACECLK); their breakout females double as scope/sniffer GND next to the trace bus. Removed = pin freed. Rule: with a guard fitted, keep that GPIO an input.
