@@ -114,55 +114,91 @@ _ROW_SAFE_MARGIN_MM = 0.4  # above J3's pad-row top edge: every net's
                            # on the same row.
 
 # --- SWD / NRESET / P3V3 tree -------------------------------------------------
-# net, [(ref, pad), ...] daisy-chain nodes, optional PICO descent
-# (pico_ref, pico_pad, gap_pin_a, gap_pin_b) -- gap_pin_a/b select the
-# unused inter-pin gap this net's PICO-row crossing threads through --,
-# lateral spike offset. J3 pin1 (P3V3) and pin2 (SWDIO) share the same x
-# column (and likewise J6 pin1/pin2) -- without an offset, both nets'
-# vertical pad-to-trunk runs would be coincident there. The offset only
-# applies to each spike's B_Cu run (a short jog right at the pad re-aligns
-# to the exact pad x), so it's safe to apply uniformly across a net's
-# whole chain (B_Cu is otherwise clear in this region regardless of x).
-# Only SWDIO needs the offset: its via sits exactly at J3.2/J6.2, so its
-# *descent* jogs -0.7mm clear of that column immediately (at its own pad's
-# y) before heading down to its trunk. P3V3's via at J3.1/J6.1 (a
-# different y -- the *other* row of the 2-row MIPI-20/cortex-10 headers)
-# then never overlaps SWDIO's vacated column, so it can stay unoffset;
-# giving it an offset too was tried and re-introduced its own conflicts
-# (too close to J3/J6's *next* column, pin4/SWCLK, only 1.27mm away, once
-# a 0.5mm track + 0.6mm via are accounted for; and a same-net hole-to-hole
-# clash between the offset landing point and the nearby PICO/J1B gap
-# column reused below).
-# P3V3's PICO/J1B gap crossing uses PICO's own pin1/pin2 gap (x=3.485,
-# genuinely unused elsewhere) rather than reusing one of the trace
-# bundle's gaps -- every trace-bundle gap turned out to sit within
-# ~0.6mm of some *other* SWD-tree node's own column (a coincidence of
-# the MIPI-20/cortex-10 1.27mm pitch vs. the PICO/J1B 2.54mm pitch), so
-# reusing any of them just traded the JP2 problem for a new one. Pin1/2's
-# gap has its own problem instead -- it sits almost directly under JP2 (a
-# THT guard jumper, B_Cu-blocking) further down the board -- handled by
-# routing.main's P3V3 special case: a dogleg to a genuinely clear column
-# right after crossing J1B's row, before continuing down past JP2.
-_SWD_TREE = [
-    ("SWDIO", [("J3", "2"), ("J4", "3"), ("J6", "2"), ("J7", "3")], None, -0.7),
-    ("SWCLK", [("J3", "4"), ("J4", "1"), ("J6", "4"), ("J7", "1")], None, 0.0),
-    ("NRESET", [("J3", "10"), ("J6", "10"), ("SW1", "1")], ("PICO", "30", "8", "9"), 0.0),
-    ("P3V3", [("J3", "1"), ("J6", "1")], ("PICO", "36", "1", "2"), 0.0),
-]
-_P3V3_DOGLEG_X_MM = 6.6   # post-J1B column P3V3's PICO descent jogs to,
-                          # clear of JP2 (blocks x 1.965-3.665), of MH3's
-                          # NPTH hole zone (x<=6.1 for y 57.9-62.1 at the
-                          # Task-14c 92x64 board), and of J3's leftmost pad
-                          # column (x=8.815, clear by 1.9mm on B_Cu)
-_TRUNK_SPACING_MM = 0.85  # vertical spacing between the 4 nets' B_Cu trunks
-                          # -- kept modest because the *deepest* trunk plus
-                          # a crossing hop must still clear MH3 (a mounting
-                          # hole at x 2.4-5.6mm, y>=72.4mm -- P3V3's own
-                          # PICO/J1B-row descent column, 3.485mm, sits
-                          # inside that x range, so how deep the trunk
-                          # stack is allowed to go is bounded by MH3's y)
-_HOP_MM = 1.0             # F_Cu-hop half-span around a crossed shallower
-                          # trunk (clears via + trunk halfwidth + clearance)
+# Task-14f re-placement note: J3/J6's pads are 2.4mm TALL (not wide --
+# footprint rotation swaps W/H), so the two pin rows sit at y 56.05-58.45
+# (north: SWDIO/SWCLK/-/-/NRESET/[trace bundle]) and y 59.95-62.35 (south:
+# P3V3/GND/GND/-/GND/V5_JTRACE...), only 1.5mm apart. The board is also
+# only 64.1mm tall, so "stack all 4 trunks south of SW1" (the pre-Task-14f
+# strategy) no longer fits at all (SW1's own bottom pad edge is at
+# y=62.855, leaving under 1mm before the 0.5mm board-edge-clearance
+# limit) -- and even 3 B_Cu trunks sharing the 1.5mm inter-row gap don't
+# DRC-clean (a hopping net's via, clipped to land at its own trunk_y,
+# needs 0.6mm clearance -- via radius 0.3 + track halfwidth 0.1 +
+# clearance 0.2 -- from EVERY other trunk it's near, and 3-way stacking
+# in 1.5mm can't provide that everywhere).
+#
+# New strategy: SWDIO and NRESET are the *only* B_Cu nets through the
+# tight inter-row gap (NRESET hopping over SWDIO via `_spike_to_trunk`'s
+# shallower-trunk machinery -- proven DRC-clean: 0.3mm row-edge margin +
+# 0.6mm+ via-vs-track clearance + 0.5mm+ via-vs-south-row margin, all
+# inside 1.5mm with a few hundredths of a mm to spare). A *third* net
+# sharing this gap on either layer always collides with one of the two:
+# 3-way B_Cu stacking needs 0.3+0.6+0.6+0.5=2.0mm (only 1.5mm exists),
+# and a constant-y F_Cu net collides with NRESET's hop bridge -- which,
+# to physically get past SWDIO's B_Cu line, must itself occupy B_Cu
+# across a ~1.3mm y-span centered on SWDIO's trunk, which is most of the
+# gap's own height.
+#
+# So SWCLK and P3V3 skip the gap entirely -- both plain F_Cu, which
+# never needs clearance against SWDIO/NRESET's B_Cu (different layer);
+# they only need to dodge the *pads* they pass on the way down (the
+# south row's own GND/P3V3 pads share SWCLK's J3/J6 columns) via a
+# sideways jog while still between the two rows (open, unconstrained by
+# pad pitch there), landing in a south-of-south-row F_Cu band
+# (_SWD_LANE_Y) where SWCLK and P3V3 in turn need only ONE mutual hop
+# (SWCLK is shallow and spans wider -- J3/J4/J6/J7 -- so keeping it
+# shallow means P3V3, which only touches J3/J6, needs just a single hop
+# where its J6 spike must pass SWCLK's line).
+_SWD_TREE = {
+    "SWDIO": [("J3", "2"), ("J4", "3"), ("J6", "2"), ("J7", "3")],
+    "SWCLK": [("J3", "4"), ("J4", "1"), ("J6", "4"), ("J7", "1")],
+    "NRESET": [("J3", "10"), ("J6", "10"), ("SW1", "1")],
+    "P3V3": [("J3", "1"), ("J6", "1")],
+}
+_SWD_LANE_Y = {"SWDIO": 58.80, "NRESET": 59.42, "SWCLK": 62.65, "P3V3": 62.90}
+_HOP_MM = 0.65            # F_Cu-hop half-span around a crossed shallower
+                          # B_Cu trunk (NRESET hopping SWDIO) -- clears
+                          # via radius (0.3) + track halfwidth (0.1) +
+                          # clearance (0.2) = 0.6mm from the crossed
+                          # track's centerline, with a hair of margin.
+# NRESET's PICO descent: gap pins 9/10 (x=23.805) -- east of the whole
+# trace-bundle corridor (lanes max x=16.185, J3 landings max x=20.605) AND
+# with real margin from J3's TD3 pad (edge x=20.975): the nearer 8/9 gap
+# (x=21.265) is only 0.29mm from that edge, not enough for the hop-via
+# NRESET needs there (0.5mm: via radius 0.3 + clearance 0.2) even though
+# a plain track fits fine.
+_NRESET_PICO_GAP = ("PICO", "30", "9", "10")
+# SWCLK's J3/J6 columns (10.445/51.13) sit directly above a south-row GND
+# pad at the *same* x -- jog to a clear column before descending past it.
+_SWCLK_ESCAPE_X = {"J3": 7.5, "J6": 48.5}  # WEST -- east would cross
+                                           # NRESET's B_Cu-hop F_Cu bridge
+                                           # (a single-point obstacle at
+                                           # x=14.255/23.805/54.94, y
+                                           # 58.15-59.42) which only
+                                           # exists east of J3/J6's own
+                                           # columns here
+_ROW_CLEAR_Y = 58.90     # south of J3/J4/J6/J7's north-row pad bottom
+                         # edge (58.45) by 0.45mm -- SWCLK's safe y to
+                         # jog sideways in before continuing down
+# P3V3's PICO descent: gap pins 1/2 (x=3.485, PICO's own westmost gap),
+# then a short dogleg WEST to x=0.7 -- east (as originally tried) crosses
+# the trace bundle's own TRACECLK lane (x=6.025, occupied y~49.0-55.4).
+# The dogleg happens south of JP2 (pad bbox bottom edge 53.105 at
+# x=2.215; GP0's guard-net breakout runs J1B(47.8)->JP2(52.255) right
+# through that column) but the deep run down to the south band only
+# rejoins x=7.0 (not staying at x=0.7 the whole way) -- x=0.7 clips the
+# board's rounded SW corner once y gets as deep as the south band (arc
+# center (3,61) r=3mm; solving for the min x clearing r+0.5mm clearance+
+# 0.1mm halfwidth at y=62.9 gives x>=6.15), so the path returns east to
+# x=7.0 (clear of both the corner and MH3's NPTH hole -- pad bbox x
+# 2.4-5.6, y 58.4-61.6, r=1.6mm center (4,60); needs center-to-track
+# >=1.6+0.25+0.1=1.95mm, x=7.0 gives 3.0mm) at y=57.0, i.e. *after*
+# TRACECLK's lane has already ended (conv_start ~55.4) so the return
+# jog can't cross it either.
+_P3V3_PICO_GAP = ("PICO", "36", "1", "2")
+_P3V3_WEST_X_MM = 0.7
+_P3V3_DOGLEG_X_MM = 7.0
+_P3V3_DOGLEG_Y_MM = 57.0
 
 
 def _mm(x, y):
@@ -201,27 +237,6 @@ def _approach_above(board, ref, pins, margin=0.3):
     point to be at before turning to thread the row's gap."""
     tops = [_bbox(_pad(board, ref, p))[1] for p in pins]
     return min(tops) - margin
-
-
-def _south_clear_y(board):
-    """y (mm) below every pad belonging to the debug-connector row (JP2,
-    JP3, SW1, J3/J6's own south-row pads which are ~2.4mm tall, J4/J7's
-    mechanical pads) -- a safe corridor for the shallowest B_Cu SWD/
-    NRESET/P3V3 trunk (SWDIO).
-
-    Margin includes `_HOP_MM` because a *deeper* net's first crossing hop
-    lands at (shallowest_trunk_y - _HOP_MM) -- i.e. back *up towards* the
-    pad row -- so the shallowest trunk itself must sit `_HOP_MM` (plus a
-    real clearance allowance) past every obstacle, or that hop-via would
-    land inside e.g. J3's south-row pads (which was the actual bug: they
-    reach much further down, to the row's ~67mm bottom edge, than their
-    own header's nominal y suggests)."""
-    lowest = 0.0
-    for ref in ("JP2", "JP3", "SW1", "J3", "J6", "J4", "J7"):
-        fp = board.FindFootprintByReference(ref)
-        for p in fp.Pads():
-            lowest = max(lowest, _bbox(p)[3])
-    return lowest + _HOP_MM + 0.6
 
 
 def _net(board, name):
@@ -422,75 +437,139 @@ def _spike_to_trunk(board, ni, px, py, trunk_y, width_mm, via_dia, via_drill, sh
     return pxo
 
 
-def _route_swd_tree(board):
-    base_y = _south_clear_y(board)
-    default_width_mm = pcbnew.ToMM(
+def _route_swd_tree_bcu(board, net_name, shallower, pico_gap=None):
+    """B_Cu trunk at _SWD_LANE_Y[net_name], via-per-node (J3/J4/J6/J7/SW1
+    pads are all F_Cu-only SMD), hopping over any already-routed
+    *shallower* B_Cu trunk via `_spike_to_trunk`. Only SWDIO uses this
+    path now (see module-level comment) -- kept general in case a future
+    net needs the same shallower-hop machinery."""
+    ni = _net(board, net_name)
+    trunk_y = _SWD_LANE_Y[net_name]
+    if _net_has_tracks(board, ni):
+        xs = [_pos(_pad(board, r, p))[0] for r, p in _SWD_TREE[net_name]]
+        if pico_gap:
+            xs.append(_gap_x(board, pico_gap[0], pico_gap[2], pico_gap[3]))
+        shallower.append((trunk_y, min(xs) - 1.0, max(xs) + 1.0))
+        return
+
+    ncls = board.GetDesignSettings().m_NetSettings.GetEffectiveNetClass(net_name)
+    width_mm = pcbnew.ToMM(ncls.GetTrackWidth())
+    via_dia = pcbnew.ToMM(ncls.GetViaDiameter())
+    via_drill = pcbnew.ToMM(ncls.GetViaDrill())
+
+    xs = []
+    for ref, pad in _SWD_TREE[net_name]:
+        xy = _pos(_pad(board, ref, pad))
+        _add_via(board, ni, xy, via_dia, via_drill)
+        pxo = _spike_to_trunk(board, ni, xy[0], xy[1], trunk_y, width_mm, via_dia, via_drill, shallower)
+        xs.append(pxo)
+
+    if pico_gap:
+        pico_ref, pico_pad, gap_a, gap_b = pico_gap
+        pico_xy = _pos(_pad(board, pico_ref, pico_pad))
+        gap_x = _gap_x(board, pico_ref, gap_a, gap_b)
+        approach_y = _approach_above(board, pico_ref, [gap_a, gap_b])
+        _add_track(board, ni, pcbnew.B_Cu, [pico_xy, (gap_x, approach_y)], width_mm)
+        _spike_to_trunk(board, ni, gap_x, approach_y, trunk_y, width_mm, via_dia, via_drill, shallower)
+        xs.append(gap_x)
+
+    x0, x1 = min(xs), max(xs)
+    _add_track(board, ni, pcbnew.B_Cu, [(x0, trunk_y), (x1, trunk_y)], width_mm)
+    shallower.append((trunk_y, x0 - 1.0, x1 + 1.0))
+
+
+def _route_swclk(board):
+    """SWCLK: plain F_Cu throughout, no vias -- J3/J4/J6/J7 pads are all
+    F_Cu-only SMD. Skips the tight inter-row gap (SWDIO/NRESET's B_Cu
+    territory -- different layer, so no clearance conflict either way,
+    but the gap has no room left regardless) and descends straight to
+    the south-of-south-row band (_SWD_LANE_Y['SWCLK'], the *shallow* F_Cu
+    lane -- P3V3 hops over it, see _route_p3v3_swd). J3/J6's columns
+    (10.445/51.13) sit directly above a south-row GND pad at the *same*
+    x, so those two nodes jog to a connector-clear column
+    (_SWCLK_ESCAPE_X) while still between the rows (open, unconstrained
+    by row pad pitch) before continuing down; J4/J7 are simple single-row
+    headers with nothing blocking below, so they descend directly."""
+    ni = _net(board, "SWCLK")
+    if _net_has_tracks(board, ni):
+        return
+    w = _class_width(board, "SWCLK")
+    south_y = _SWD_LANE_Y["SWCLK"]
+    xs = []
+    for ref, pad in _SWD_TREE["SWCLK"]:
+        x, y = _pos(_pad(board, ref, pad))
+        esc_x = _SWCLK_ESCAPE_X.get(ref, x)
+        # Straight down the pad's own column to _ROW_CLEAR_Y first (south
+        # of the row's bottom edge, 58.45) -- *then* jog sideways. Jogging
+        # at the pad's own y=57.2-57.25 would sweep straight through the
+        # whole row (every other pin's pad, plus the trace bundle's
+        # landing columns further east).
+        _add_track(board, ni, pcbnew.F_Cu,
+                   [(x, y), (x, _ROW_CLEAR_Y), (esc_x, _ROW_CLEAR_Y), (esc_x, south_y)], w)
+        xs.append(esc_x)
+    x0, x1 = min(xs), max(xs)
+    _add_track(board, ni, pcbnew.F_Cu, [(x0, south_y), (x1, south_y)], w)
+
+
+def _route_p3v3_swd(board):
+    """P3V3's VTref taps (J3.1/J6.1): B_Cu throughout except a short F_Cu
+    stub into each SMD pad (PICO.36 is THT, no via needed to start on
+    B_Cu). Descends PICO's own westmost row-gap (pins 1/2, x=3.485),
+    doglegs west then back east around the board's rounded corner/MH3
+    (see _P3V3_WEST_X_MM/_P3V3_DOGLEG_X_MM comment) to the
+    south-of-south-row band (_SWD_LANE_Y['P3V3']), then east to J3.1/
+    J6.1. Being B_Cu the whole way avoids SWCLK's F_Cu south lane (also
+    x 7.5-68.57ish, would otherwise need a hop that doesn't fit the
+    board-edge-constrained vertical budget down there) and SWDIO/
+    NRESET's B_Cu trunks (58.80/59.42 -- P3V3's own B_Cu never reaches
+    that far north in x<9.175, its own path's x range is disjoint from
+    theirs). Necked to Default width (0.2mm): the nominal 0.5mm Power
+    width doesn't clear the ~0.84mm PICO/J1B pin-pitch gap."""
+    ni = _net(board, "P3V3")
+    if _net_has_tracks(board, ni):
+        return
+    w = pcbnew.ToMM(
         board.GetDesignSettings().m_NetSettings.GetDefaultNetclass().GetTrackWidth()
     )
-    shallower = []  # (trunk_y, x_min, x_max) of nets already routed this call
+    ncls = board.GetDesignSettings().m_NetSettings.GetEffectiveNetClass("P3V3")
+    via_dia = pcbnew.ToMM(ncls.GetViaDiameter())
+    via_drill = pcbnew.ToMM(ncls.GetViaDrill())
+    south_y = _SWD_LANE_Y["P3V3"]
 
-    for i, (net_name, nodes, pico_descent, x_offset) in enumerate(_SWD_TREE):
-        ni = _net(board, net_name)
-        if _net_has_tracks(board, ni):
-            # Idempotent skip -- but a *later* net must still know about
-            # this one's trunk so its own crossings are computed
-            # correctly on a from-scratch re-run vs. a partial one. Since
-            # this script only ever runs the whole tree atomically (no
-            # tracks => none of the four have tracks yet), this is a
-            # no-op path in practice; recompute the trunk_y the same way
-            # main() would have, for consistency.
-            trunk_y = base_y + i * _TRUNK_SPACING_MM
-            xs = [_pos(_pad(board, r, p))[0] + x_offset for r, p in nodes]
-            if pico_descent:
-                xs.append(_P3V3_DOGLEG_X_MM if net_name == "P3V3" else
-                          _gap_x(board, pico_descent[0], pico_descent[2], pico_descent[3]))
-            shallower.append((trunk_y, min(xs) - 1.0, max(xs) + 1.0))
-            continue
+    pico_ref, pico_pad, gap_a, gap_b = _P3V3_PICO_GAP
+    pico_xy = _pos(_pad(board, pico_ref, pico_pad))
+    gap_x = _gap_x(board, pico_ref, gap_a, gap_b)
+    approach_y = _approach_above(board, pico_ref, [gap_a, gap_b])
+    # The westward dogleg must happen *south* of JP2 (pad bbox bottom edge
+    # 53.105 at x=2.215), not just south of J1B's row -- GP0's guard-net
+    # breakout stub runs J1B(47.8)->JP2(52.255) right through x=2.215, and
+    # the dogleg's horizontal jog (gap_x=3.485 -> _P3V3_WEST_X_MM) would
+    # otherwise cross it (though it's B_Cu vs GP0's F_Cu now, so this is
+    # belt-and-suspenders, not strictly required any more).
+    jp2_bottom = _bbox(_pad(board, "JP2", "1"))[3]
+    post_jp2_y = jp2_bottom + 0.3
+    _add_track(board, ni, pcbnew.B_Cu, [
+        pico_xy, (gap_x, approach_y), (gap_x, post_jp2_y),
+        (_P3V3_WEST_X_MM, post_jp2_y), (_P3V3_WEST_X_MM, _P3V3_DOGLEG_Y_MM),
+        (_P3V3_DOGLEG_X_MM, _P3V3_DOGLEG_Y_MM), (_P3V3_DOGLEG_X_MM, south_y),
+    ], w)
 
-        ncls = board.GetDesignSettings().m_NetSettings.GetEffectiveNetClass(net_name)
-        width_mm = pcbnew.ToMM(ncls.GetTrackWidth())
-        via_dia = pcbnew.ToMM(ncls.GetViaDiameter())
-        via_drill = pcbnew.ToMM(ncls.GetViaDrill())
-        trunk_y = base_y + i * _TRUNK_SPACING_MM
+    xs = [_P3V3_DOGLEG_X_MM]
+    for ref, pad in _SWD_TREE["P3V3"]:
+        x, y = _pos(_pad(board, ref, pad))
+        _add_track(board, ni, pcbnew.B_Cu, [(x, south_y), (x, y)], w)
+        _add_via(board, ni, (x, y), via_dia, via_drill)
+        xs.append(x)
+    x0, x1 = min(xs), max(xs)
+    _add_track(board, ni, pcbnew.B_Cu, [(x0, south_y), (x1, south_y)], w)
 
-        xs = []
-        for ref, pad in nodes:
-            xy = _pos(_pad(board, ref, pad))
-            _add_via(board, ni, xy, via_dia, via_drill)
-            pxo = _spike_to_trunk(board, ni, xy[0], xy[1], trunk_y, width_mm, via_dia, via_drill, shallower, x_offset)
-            xs.append(pxo)
 
-        if pico_descent:
-            pico_ref, pico_pad, gap_a, gap_b = pico_descent
-            pico_xy = _pos(_pad(board, pico_ref, pico_pad))
-            gap_x = _gap_x(board, pico_ref, gap_a, gap_b)
-            approach_y = _approach_above(board, pico_ref, [gap_a, gap_b])
-            # P3V3's nominal 0.5mm Power-class width does not fit the
-            # ~0.84mm PICO/J1B pin-pitch gap with clearance to spare
-            # (0.17mm < 0.2mm required); neck to Default width (0.2mm,
-            # clears with 0.32mm margin) for this crossing only.
-            neck_mm = default_width_mm if net_name == "P3V3" else width_mm
-            if net_name == "P3V3":
-                # Dogleg clear of JP2 (see _SWD_TREE comment): cross J1B's
-                # row at gap_x as usual, then jog to _P3V3_DOGLEG_X_MM
-                # right after (while still well above JP2), and only
-                # then descend the rest of the way.
-                j1b_bottom = max(_bbox(_pad(board, "J1B", str(n)))[3] for n in range(1, 10))
-                post_j1b_y = j1b_bottom + 0.6
-                descent_x = _P3V3_DOGLEG_X_MM
-                _add_track(board, ni, pcbnew.B_Cu,
-                           [pico_xy, (gap_x, approach_y), (gap_x, post_j1b_y), (descent_x, post_j1b_y)],
-                           neck_mm)
-                _spike_to_trunk(board, ni, descent_x, post_j1b_y, trunk_y, neck_mm, via_dia, via_drill, shallower)
-            else:
-                descent_x = gap_x
-                _add_track(board, ni, pcbnew.B_Cu, [pico_xy, (gap_x, approach_y)], neck_mm)
-                _spike_to_trunk(board, ni, gap_x, approach_y, trunk_y, neck_mm, via_dia, via_drill, shallower)
-            xs.append(descent_x)
-
-        x0, x1 = min(xs), max(xs)
-        _add_track(board, ni, pcbnew.B_Cu, [(x0, trunk_y), (x1, trunk_y)], width_mm)
-        shallower.append((trunk_y, x0 - 1.0, x1 + 1.0))
+def _route_swd_tree(board):
+    shallower = []  # only SWDIO/NRESET use the B_Cu shallower-hop machinery
+    _route_swd_tree_bcu(board, "SWDIO", shallower)
+    _route_swd_tree_bcu(board, "NRESET", shallower, pico_gap=_NRESET_PICO_GAP)
+    _route_swclk(board)
+    _route_p3v3_swd(board)
 
 
 
@@ -619,505 +698,15 @@ def _route_internal_ties(board):
 
 
 
-# ============================================================================
-# Task 14c: co-designed completion routing for the 92x64 board.
-#
-# Architecture (matched pair with hw/place.py's POS -- see task-14c-report):
-#   - Top band (B_Cu, y 17.2..20.4, between J2B's row and PICO's top row):
-#     west-to-east sources GP21/GP20/GP19/GP18 take shallow-to-deep lanes;
-#     GP21/GP20 terminate in-band at R_HDM/R_HDP, GP19/GP18 descend the
-#     east corridor to the device cluster (dest rows ordered to match).
-#   - Bottom band (B_Cu, y 43.5..45.9): FLT/BTN/DPU/SCL/SDA, west source =
-#     deeper lane; corridor columns at x 52.0..56.9.
-#   - B_Cu rims across the top strip (y 9.4 VBUS_SEL, 13.05 VBUS_NET,
-#     13.9 DEV_VBUS_DET, 14.35 ISENSE) with east-side drops at x 84.2/83.6.
-#   - North-bound nets (I2C to STEMMA, GP10, UART, plus the DVD/ISENSE
-#     escapes) thread PICO-top-row/J2B gap columns: B_Cu between the rows,
-#     a via just north of the top row, F_Cu across the band/J2B/rim strip
-#     (F is clear there; every horizontal system in the strip is B_Cu).
-#   - GND stays unrouted (Task 15 pour), incl. SW1/SW_USER pad-2 pairs,
-#     JP2.2/JP3.2, all *_PD pad 2s, TP3, ESD GND, shields.
-# ============================================================================
-
-_EAST = {}  # net -> corridor column x
-_EAST["DPU"] = 52.0
-_EAST["FLT"] = 52.6
-_EAST["BTN"] = 53.52   # = SW_USER pad 1L x (F_Cu above y 22.3)
-_EAST["SCL"] = 54.2
-_EAST["SDA"] = 54.8
-_EAST["GP19"] = 56.1
-_EAST["GP18"] = 57.1
-
-_TOP_LANE = {"GP21": 17.2, "GP20": 18.0, "GP19": 18.8, "GP18": 19.6}
-_BOT_LANE = {"FLT": 43.5, "BTN": 44.1, "DPU": 44.7, "SCL": 45.3, "SDA": 45.9}
-
-_RIM_SEL_Y = 9.4      # VBUS_SEL west-east rim (above the JP1/JP4 hole row)
-_RIM_NET_Y = 13.05    # VBUS_NET short rim segment (x 12..13.645)
-_RIM_DVD_Y = 13.9     # DEV_VBUS_DET rim -> east drop x 84.2
-_RIM_ISNS_Y = 14.35   # ISENSE rim -> east drop x 83.6
-_DROP_DVD_X = 84.2
-_DROP_ISNS_X = 83.6
-
-# North-bound gap columns (PICO top row / J2B share pin columns, so one gap
-# x threads both rows) + per-net inter-row jog depth (stacked so no two
-# same-layer segments collide; NRESET's Task-13 jog sits at y 23.9).
-_GAP_COL = {"SDA": 28.885, "GP10": 33.965,
-            "UART0_TX": 39.045, "UART0_RX": 41.585}
-_NB_JOG = {"SDA": 25.1, "GP10": 24.5,
-           "UART0_TX": 24.5, "UART0_RX": 24.5}
-_NB_VIA_Y = 21.9      # F/B transition just north of PICO's top row
-
-
-def _cls(board, net_name):
-    ns = board.GetDesignSettings().m_NetSettings
-    ncls = ns.GetEffectiveNetClass(net_name)
-    return (pcbnew.ToMM(ncls.GetTrackWidth()),
-            pcbnew.ToMM(ncls.GetViaDiameter()),
-            pcbnew.ToMM(ncls.GetViaDrill()))
-
-
-def _route_mixed(board, net_name, segs, width=None):
-    """Idempotently add a mixed F/B path for `net_name`. `segs` is a list of
-    ("F"|"B", [pts...]) runs; a via is dropped automatically at every layer
-    transition point (last pt of one run == first pt of the next). Skip-if-
-    present keyed on the first segment of the first run."""
-    ni = _net(board, net_name)
-    w, via_dia, via_drill = _cls(board, net_name)
-    if width is not None:
-        w = width
-    first = segs[0][1]
-    if _track_exists(board, ni.GetNetCode(),
-                     pcbnew.F_Cu if segs[0][0] == "F" else pcbnew.B_Cu,
-                     _mm(*first[0]), _mm(*first[1])):
-        return False
-    prev = None
-    for layer_name, pts in segs:
-        layer = pcbnew.F_Cu if layer_name == "F" else pcbnew.B_Cu
-        if prev is not None and prev[1] is not None:
-            pl, pp = prev
-            if pl != layer_name:
-                assert pp == pts[0], f"{net_name}: via point mismatch {pp} vs {pts[0]}"
-                _add_via(board, ni, pts[0], via_dia, via_drill)
-        _add_track(board, ni, layer, pts, w)
-        prev = (layer_name, pts[-1])
-    return True
-
-
-def _p(board, ref, num, index=0):
-    return _pos(_pad(board, ref, num, index))
-
-
-# --- Local cluster edges (F_Cu; explicit waypoints where a plain bend would
-# clip a neighbor). Pad numbers per hw/netlist.py padmaps: ESD 1=IO1 2=GND
-# 3=IO2 4=IO2B 5=VBUS 6=IO1B; U_HSW 1=OUT 2=GND 3=FLG 4=EN 5=IN; U_ISNS
-# 1=OUT 2=GND 3=IN+ 4=IN- 5=VS; J5 1=VBUS 2=DM 3=DP 4=GND; INA219 1=IN+
-# 2=IN- 3=GND 4=VS 5=SCL 6=SDA.
-_LOCAL_EDGES = [
-    # Host D+ row (y 15.55): R_HDP.2 -> TP1 (in-line V-jog north) -> ESD_H.1;
-    # ESD_H.6 -> J5.DP. R_HDP_PD taps ESD_H.1's pad box vertically.
-    ("HOST_DP", ("R_HDP", "2"), ("TP1", "1"), None),
-    ("HOST_DP", ("TP1", "1"), ("ESD_H", "1"), None),
-    ("HOST_DP", ("R_HDP_PD", "1"), ("ESD_H", "1"), [(72.3, 15.55)]),
-    ("HOST_DP", ("ESD_H", "6"), ("J5", "3"), None),
-    # Host D- row (y 17.45): mirrored through TP2 (V-jog south).
-    ("HOST_DM", ("R_HDM", "2"), ("TP2", "1"), None),
-    ("HOST_DM", ("TP2", "1"), ("ESD_H", "3"), None),
-    ("HOST_DM", ("R_HDM_PD", "1"), ("ESD_H", "3"), [(72.3, 17.45)]),
-    ("HOST_DM", ("ESD_H", "4"), ("J5", "2"), None),
-    # Device D+ row (y 43.75) and D- row (y 45.65) into ESD_D then J9.
-    ("DEV_DP", ("R_DDP", "2"), ("ESD_D", "1"), None),
-    ("DEV_DP", ("ESD_D", "6"), ("J9", "3"), [(85.5, 44.85)]),
-    ("DEV_DM", ("R_DDM", "2"), ("ESD_D", "3"), None),
-    ("DEV_DM", ("ESD_D", "4"), ("J9", "2"), None),
-    # R_DPU.1 taps the DEV_DP row between R_DDP.2 and ESD_D.1.
-    ("DEV_DP", ("R_DPU", "1"), ("R_DDP", "2"), [(63.0, 44.55), (70.3, 44.55), (70.3, 43.75)]),
-    # ESD arrays are flow-through: tie each net's in/out pads through the body.
-    ("HOST_DP", ("ESD_H", "1"), ("ESD_H", "6"), None),
-    ("HOST_DM", ("ESD_H", "3"), ("ESD_H", "4"), None),
-    ("DEV_DP", ("ESD_D", "1"), ("ESD_D", "6"), None),
-    ("DEV_DM", ("ESD_D", "3"), ("ESD_D", "4"), None),
-    # J9_VBUS web: divider top pad -> J9.1 (necked 0.3 past J9's shield pad),
-    # DNP bus-power diode -> divider; ESD_D.5 joins via _route_j9_vbus_esd.
-    ("J9_VBUS", ("R_J9VD_T", "1"), ("J9", "1"), [(85.3, 47.81), (85.3, 46.3)], 0.3),
-    ("J9_VBUS", ("D_J9_BUSPWR", "1"), ("R_J9VD_T", "1"), [(82.4, 52.5), (82.4, 47.81)]),
-    # DEV_VBUS_DET local: R_J9VD_T.2 -> R_J9VD_B.1 (straight, y 45.89).
-    ("DEV_VBUS_DET", ("R_J9VD_T", "2"), ("R_J9VD_B", "1"), None),
-    # NRESET: C_NRESET.1 drops onto SW1's pad-1 tie row.
-    ("NRESET", ("C_NRESET", "1"), ("SW1", "1"), [(58.35, 53.55)]),
-    # Power cluster locals (U_ISNS/U_INA219_ALT flank R_SHUNT; sense taps
-    # necked to 0.25mm -- they carry no current). HOST_5V_IN's spine is a
-    # single vertical at x 67.0 east of everything.
-    ("HOST_5V_IN", ("U_INA219_ALT", "2"), ("U_HSW", "5"), [(67.0, 28.63), (67.0, 37.25)]),
-    ("HOST_5V_IN", ("R_SHUNT", "2"), ("U_ISNS", "4"), [(67.0, 31.5), (67.0, 35.55)]),
-    ("VBUS_SEL", ("U_INA219_ALT", "1"), ("R_SHUNT", "1"), [(62.64, 30.9)], 0.25),
-    ("VBUS_SEL", ("U_ISNS", "3"), ("R_SHUNT", "1"), [(62.4, 35.55), (62.4, 31.5)], 0.25),
-    # Power LED chain + native-VBUS-detect divider + user LED chain.
-    ("LED_PWR_A", ("R_LED_PWR", "2"), ("LED_PWR", "2"), None),
-    ("NATIVE_VBUS_DET", ("R_NVD_T", "2"), ("R_NVD_B", "1"), None),
-    ("LED_USER", ("R_LED_USER", "2"), ("LED_USER", "2"), None),
-    # V5_JTRACE local tie along J3's south row.
-    ("V5_JTRACE", ("J3", "11"), ("J3", "13"), None),
-]
-
-
-def _route_local_clusters(board):
-    for edge in _LOCAL_EDGES:
-        net_name, (ref_a, pad_a), (ref_b, pad_b), bend = edge[:4]
-        ni = _net(board, net_name)
-        w = edge[4] if len(edge) > 4 else _class_width(board, net_name)
-        p0 = _p(board, ref_a, pad_a)
-        p1 = _p(board, ref_b, pad_b)
-        if bend is None:
-            pts = [p0, p1]
-        elif callable(bend):
-            pts = bend(p0, p1)
-        else:
-            pts = [p0] + list(bend) + [p1]
-        _add_path_once(board, ni, pcbnew.F_Cu, pts, w)
-
-
-def _route_top_band(board):
-    """GP21/GP20/GP19/GP18: PICO top-row pads (THT, direct B_Cu) escape
-    north into their lanes and head east. GP21/GP20 terminate at R_HDM.1/
-    R_HDP.1 (dest rows chosen == lane order, so no crossings); GP19/GP18
-    descend corridor columns to R_DDM.1/R_DDP.1. GP18 (east source, deep
-    lane, shallow dest -- the one genuine inversion) hops F_Cu over GP19's
-    column at the lane depth."""
-    # GP21 -> R_HDM.1 (67.01,17.45): via at lane end, short F feed.
-    p27 = _p(board, "PICO", "27")
-    hdm1 = _p(board, "R_HDM", "1")
-    _route_mixed(board, "GP21", [
-        ("B", [p27, (p27[0], 17.2), (66.2, 17.2)]),
-        ("F", [(66.2, 17.2), hdm1]),
-    ])
-    # GP20 -> R_HDP.1 (67.01,15.55): via west of R_HDM, F north then east.
-    p26 = _p(board, "PICO", "26")
-    hdp1 = _p(board, "R_HDP", "1")
-    _route_mixed(board, "GP20", [
-        ("B", [p26, (p26[0], 18.0), (65.6, 18.0)]),
-        ("F", [(65.6, 18.0), (65.6, 15.55), hdp1]),
-    ])
-    # GP19 -> corridor col 55.9 -> exit y 45.65 -> via -> F -> R_DDM.1.
-    p25 = _p(board, "PICO", "25")
-    ddm1 = _p(board, "R_DDM", "1")
-    _route_mixed(board, "GP19", [
-        ("B", [p25, (p25[0], 18.8), (_EAST["GP19"], 18.8),
-               (_EAST["GP19"], 45.65), (67.5, 45.65)]),
-        ("F", [(67.5, 45.65), ddm1]),
-    ])
-    # GP18: B lane 19.6 to x 55.3, F hop over GP19's column, B col 56.9
-    # down to y 43.75, east, via, F feed into R_DDP.1.
-    p24 = _p(board, "PICO", "24")
-    ddp1 = _p(board, "R_DDP", "1")
-    _route_mixed(board, "GP18", [
-        ("B", [p24, (p24[0], 19.6), (55.5, 19.6)]),
-        ("F", [(55.5, 19.6), (_EAST["GP18"], 19.6)]),
-        ("B", [(_EAST["GP18"], 19.6), (_EAST["GP18"], 43.75), (67.5, 43.75)]),
-        ("F", [(67.5, 43.75), ddp1]),
-    ])
-
-
-def _route_bottom_band(board):
-    """Bottom-row escapes into the east corridor. Sources descend from
-    their THT pads to their lanes (west source = deeper lane), run east,
-    and resolve at their columns: FLT ascends to U_HSW.FLG, BTN ascends
-    (B to y 22.3, then F -- its column doubles as SW_USER pad 1L's x) to
-    the user button, DPU drops to R_DPU.2, SCL/SDA ascend to the INA219
-    (DNP) I2C pads."""
-    flg = _p(board, "U_HSW", "3")
-    p20 = _p(board, "PICO", "20")
-    _route_mixed(board, "HOST_VBUS_FLT", [
-        ("B", [p20, (p20[0], _BOT_LANE["FLT"]), (_EAST["FLT"], _BOT_LANE["FLT"]),
-               (_EAST["FLT"], flg[1])]),
-        ("F", [(_EAST["FLT"], flg[1]), flg]),
-    ])
-    p19 = _p(board, "PICO", "19")
-    sw1l = _p(board, "SW_USER", "1")  # west pad of the pad-1 pair
-    _route_mixed(board, "BTN_USER", [
-        ("B", [p19, (p19[0], _BOT_LANE["BTN"]), (_EAST["BTN"], _BOT_LANE["BTN"]),
-               (_EAST["BTN"], 22.3)]),
-        ("F", [(_EAST["BTN"], 22.3), (_EAST["BTN"], 13.4), (52.445, 13.4),
-               (52.445, 8.0), sw1l]),
-    ])
-    p15 = _p(board, "PICO", "15")
-    dpu2 = _p(board, "R_DPU", "2")
-    _route_mixed(board, "DEV_DP_PU_EN", [
-        ("B", [p15, (p15[0], _BOT_LANE["DPU"]), (51.4, _BOT_LANE["DPU"])]),
-        ("F", [(51.4, _BOT_LANE["DPU"]), (51.4, 47.0), (63.0, 47.0), dpu2]),
-    ])
-    # SCL/SDA: south lanes east, columns north to the INA219's west pads;
-    # the north (STEMMA) branches are separate paths in _route_north_bound.
-    p12 = _p(board, "PICO", "12")
-    ina_scl = _p(board, "U_INA219_ALT", "5")
-    _route_mixed(board, "I2C0_SCL", [
-        ("B", [p12, (p12[0], _BOT_LANE["SCL"]), (_EAST["SCL"], _BOT_LANE["SCL"]),
-               (_EAST["SCL"], ina_scl[1])]),
-        ("F", [(_EAST["SCL"], ina_scl[1]), ina_scl]),
-    ])
-    p11 = _p(board, "PICO", "11")
-    ina_sda = _p(board, "U_INA219_ALT", "6")
-    _route_mixed(board, "I2C0_SDA", [
-        ("B", [p11, (p11[0], _BOT_LANE["SDA"]), (_EAST["SDA"], _BOT_LANE["SDA"]),
-               (_EAST["SDA"], ina_sda[1])]),
-        ("F", [(_EAST["SDA"], ina_sda[1]), ina_sda]),
-    ])
-
-
-def _route_north_bound(board):
-    """STEMMA I2C, GP10 and UART: B_Cu inter-row ascent from the bottom-row
-    THT pad, jog to a gap column, B through the top-row gap, via at
-    y 21.9, then F_Cu north across the band/J2B/rim strip to the top-edge
-    peripheral (F is clear there; all the horizontal strip systems are B)."""
-    def nb(net, pico_pad, tail_F, key=None):
-        key = key or net
-        src = _p(board, "PICO", pico_pad)
-        g = _GAP_COL[key]
-        jog = _NB_JOG[key]
-        _route_mixed(board, net, [
-            ("B", [src, (src[0], jog), (g, jog), (g, _NB_VIA_Y)]),
-            ("F", [(g, _NB_VIA_Y)] + tail_F),
-        ])
-
-    # SCL -> J_STEMMA.4 (27.5,5.4): must reach the *west* gap (dest order)
-    # from the *east* source -- hop F over SDA's inter-row ascent and the
-    # NRESET diagonal at y 25.5, then down the 26.345 gap column.
-    st4 = _p(board, "J_STEMMA", "4")
-    p12n = _p(board, "PICO", "12")
-    _route_mixed(board, "I2C0_SCL", [
-        ("B", [p12n, (p12n[0], 25.9), (28.25, 25.9)]),
-        ("F", [(28.25, 25.9), (25.7, 25.9)]),
-        ("B", [(25.7, 25.9), (25.7, 24.1), (26.345, 24.1), (26.345, _NB_VIA_Y)]),
-        ("F", [(26.345, _NB_VIA_Y), (26.345, 7.0), (st4[0], 7.0), st4]),
-    ])
-    # SDA -> J_STEMMA.3 (28.5,5.4), same pattern one gap east.
-    st3 = _p(board, "J_STEMMA", "3")
-    nb("I2C0_SDA", "11", [(_GAP_COL["SDA"], 7.0), (st3[0], 7.0), st3], key="SDA")
-    # GP10 -> R_LED_USER.1 (col == pad x, straight in).
-    rlu1 = _p(board, "R_LED_USER", "1")
-    nb("GP10", "14", [rlu1])
-    # UART: pin columns sit just east of their gaps.
-    j_u1 = _p(board, "J_UART", "1")
-    nb("UART0_TX", "16", [(_GAP_COL["UART0_TX"], 12.4), j_u1])
-    j_u2 = _p(board, "J_UART", "2")
-    nb("UART0_RX", "17", [(_GAP_COL["UART0_RX"], 12.4), j_u2])
-
-
-def _route_rims(board):
-    """DEV_VBUS_DET + ISENSE: top-row escapes at the west end of the row
-    (west of every lane's x-span), north through their own gap columns,
-    east along B_Cu rims across the whole top strip, then down the far-east
-    drops (between J5's shell holes at x<=82.9 and MH2/MH4's zone x>=84.5)
-    to the device divider / the INA180."""
-    p32 = _p(board, "PICO", "32")   # DEV_VBUS_DET, x 22.535
-    t2 = _p(board, "R_J9VD_T", "2")  # (82.6,45.89)
-    b1 = _p(board, "R_J9VD_B", "1")  # (80.9,45.89)
-    _route_mixed(board, "DEV_VBUS_DET", [
-        ("B", [p32, (p32[0], 21.35), (23.805, 21.35), (23.805, _RIM_DVD_Y),
-               (76.6, _RIM_DVD_Y), (76.6, 11.815), (_DROP_DVD_X, 11.815),
-               (_DROP_DVD_X, t2[1] - 0.29)]),
-        ("F", [(_DROP_DVD_X, t2[1] - 0.29), (_DROP_DVD_X, t2[1]), t2, b1]),
-    ])
-    p31 = _p(board, "PICO", "31")   # ISENSE, x 25.075
-    out1 = _p(board, "U_ISNS", "1")  # (63.46,33.65)
-    _route_mixed(board, "ISENSE", [
-        ("B", [p31, (p31[0], 21.0), (26.345, 21.0), (26.345, _RIM_ISNS_Y),
-               (_DROP_ISNS_X, _RIM_ISNS_Y), (_DROP_ISNS_X, 30.1), (65.6, 30.1)]),
-        ("F", [(65.6, 30.1), (64.4, 30.1), (64.4, out1[1]), out1]),
-    ])
-
-
-def _route_en(board):
-    """HOST_VBUS_EN: PICO.22 -> F gap column 46.665 north -> east at y 10.6
-    (threading between SW_USER's pad rows) with a short B hop under BTN's
-    F column -> F column x 62.6 south across the band (F is clear; every
-    horizontal band system is B) -> via -> B to y 40.6 -> via -> F into
-    U_HSW.EN + R_HVEN_PD.1."""
-    p22 = _p(board, "PICO", "22")
-    en = _p(board, "U_HSW", "4")      # (65.64,39.15)
-    pd1 = _p(board, "R_HVEN_PD", "1")  # (65.64,41.09)
-    _route_mixed(board, "HOST_VBUS_EN", [
-        ("F", [p22, (p22[0], 21.9), (46.665, 21.9), (46.665, 10.6), (51.1, 10.6)]),
-        ("B", [(51.1, 10.6), (54.9, 10.6)]),
-        ("F", [(54.9, 10.6), (62.6, 10.6), (62.6, 21.6)]),
-        ("B", [(62.6, 21.6), (62.6, 40.6)]),
-        ("F", [(62.6, 40.6), (65.64, 40.6), en]),
-    ])
-    ni = _net(board, "HOST_VBUS_EN")
-    _add_path_once(board, ni, pcbnew.F_Cu, [(65.64, 40.6), pd1],
-                   _class_width(board, "HOST_VBUS_EN"))
-
-
-def _route_vbus_sel(board):
-    """VBUS_SEL: JP1.2 -> B rim y 9.4 (above the JP1/JP4 hole row) east to
-    x 60.4 -> B down to 13.5 -> F hop across the rim/band strip -> B down
-    to 31.5 -> via -> F into R_SHUNT.1. Branch at x 10.2: via + F north to
-    R_LED_PWR.1 (threading the JP1.3/JP4.1 hole gap)."""
-    jp1_2 = _p(board, "JP1", "2")
-    sh1 = _p(board, "R_SHUNT", "1")
-    _route_mixed(board, "VBUS_SEL", [
-        ("B", [jp1_2, (jp1_2[0], _RIM_SEL_Y), (60.4, _RIM_SEL_Y), (60.4, 13.2)]),
-        ("F", [(60.4, 13.2), (60.4, 20.8)]),
-        ("B", [(60.4, 20.8), (60.4, 31.5)]),
-        ("F", [(60.4, 31.5), sh1]),
-    ])
-    led1 = _p(board, "R_LED_PWR", "1")
-    _route_mixed(board, "VBUS_SEL", [
-        ("B", [(10.2, _RIM_SEL_Y), (10.2, 9.5)]),
-        ("F", [(10.2, 9.5), led1]),
-    ])
-
-
-def _route_vbus_net(board):
-    """VBUS_NET: JP1.3 -> JP4.1 on B at the hole row's own y; JP4.1 diag to
-    the long descent column x 13.645 (a shared PICO/J1B/J2B gap column),
-    south through all four THT rows to y 50.3, east along y 50.3 (F-hopping
-    NRESET's B descent at x 21.265), via at (76.8,50.3), F to
-    D_J9_BUSPWR.2. Feeders: J8.1 (via 18.3,11.9 -> B west at y 12.4),
-    J2B.20 (B north + east at y 13.7)."""
-    jp1_3 = _p(board, "JP1", "3")
-    jp4_1 = _p(board, "JP4", "1")
-    d2 = _p(board, "D_J9_BUSPWR", "2")
-    _route_mixed(board, "VBUS_NET", [
-        ("B", [jp1_3, jp4_1, (jp4_1[0], 12.55), (18.725, 12.55),
-               (18.725, 50.3), (20.3, 50.3)]),
-        ("F", [(20.3, 50.3), (22.3, 50.3)]),
-        ("B", [(22.3, 50.3), (76.8, 50.3)]),
-        ("F", [(76.8, 50.3), (76.8, d2[1]), d2]),
-    ], width=0.35)
-    j8_1 = _p(board, "J8", "1")
-    _route_mixed(board, "VBUS_NET", [
-        ("F", [j8_1, (j8_1[0], 12.55)]),
-        ("B", [(j8_1[0], 12.55), (18.725, 12.55)]),
-    ], width=0.4)
-    j2b20 = _p(board, "J2B", "20")
-    _route_mixed(board, "VBUS_NET", [
-        ("B", [j2b20, (j2b20[0], 13.7), (18.725, 13.7)]),
-    ])
-
-
-def _route_nvd(board):
-    """NVD_TOP: JP4.2 -> B at y 11.55 east to the divider -> via -> F into
-    R_NVD_T.1. NATIVE_VBUS_DET: branch off the T.2<->B.1 tie southward,
-    B at y 8.55 east to x 52.3, via, F south past the rims into J2B.1
-    (whose breakout stub then feeds PICO.21)."""
-    jp4_2 = _p(board, "JP4", "2")
-    t1 = _p(board, "R_NVD_T", "1")   # (30.8,10.11)
-    _route_mixed(board, "NVD_TOP", [
-        ("B", [jp4_2, (jp4_2[0], 11.35), (t1[0], 11.35), (t1[0], 11.2)]),
-        ("F", [(t1[0], 11.2), t1]),
-    ])
-    t2 = _p(board, "R_NVD_T", "2")   # (30.8,9.09)
-    j2b1 = _p(board, "J2B", "1")     # (50.475,15.6)
-    _route_mixed(board, "NATIVE_VBUS_DET", [
-        ("F", [(31.7, t2[1]), (31.7, 8.55)]),
-        ("B", [(31.7, 8.55), (51.7, 8.55)]),
-        ("F", [(51.7, 8.55), (51.7, 15.1), j2b1]),
-    ])
-
-
-def _route_j9_vbus_esd(board):
-    """ESD_D.5 (VBUS clamp) -> the J9_VBUS web at R_J9VD_T.1: short F east,
-    then a B diagonal under the D+/D- fan-out, re-emerging beside the
-    divider."""
-    esd5 = _p(board, "ESD_D", "5")     # (78.64,44.7)
-    t1 = _p(board, "R_J9VD_T", "1")    # (82.6,47.81)
-    _route_mixed(board, "J9_VBUS", [
-        ("F", [esd5, (79.9, esd5[1])]),
-        ("B", [(79.9, esd5[1]), (81.75, 47.55)]),
-        ("F", [(81.75, 47.55), t1]),
-    ])
-
-
-def _route_host_vbus(board):
-    """HOST_VBUS: U_HSW.OUT -> via west of the EN corridor -> B north to
-    y 26.4 -> F east through the two bulk caps' pad-1s -> via (77.3,26.4)
-    -> B column between ESD_H/J5's pads and J5's shell holes, tapping
-    J5.1 (THT) at y 20 and ending at a via that feeds ESD_H.5 on F."""
-    out = _p(board, "U_HSW", "1")     # (63.36,37.25)
-    esd5 = _p(board, "ESD_H", "5")    # (74.74,16.5)
-    j5_1 = _p(board, "J5", "1")       # (78.615,20.0)
-    c1a = _p(board, "C_HVBUS_100n", "1")
-    c1b = _p(board, "C_HVBUS_BULK", "1")
-    _route_mixed(board, "HOST_VBUS", [
-        ("F", [out, (59.6, out[1])]),
-        ("B", [(59.6, out[1]), (59.6, 26.4)]),
-        ("F", [(59.6, 26.4), (77.3, 26.4)]),
-        ("B", [(77.3, 26.4), (77.3, 16.5)]),
-        ("F", [(77.3, 16.5), esd5]),
-    ])
-    ni = _net(board, "HOST_VBUS")
-    w, _vd, _vdr = _cls(board, "HOST_VBUS")
-    _add_path_once(board, ni, pcbnew.B_Cu, [(77.3, j5_1[1]), j5_1], w)
-    _add_path_once(board, ni, pcbnew.F_Cu, [(c1a[0], 26.4), c1a], w)
-    _add_path_once(board, ni, pcbnew.F_Cu, [(c1b[0], 26.4), c1b], w)
-
-
-def _route_p3v3_cluster(board):
-    """P3V3 to the power cluster, sourced at PICO.36's own THT pad: B_Cu
-    inter-row descent at x 12.375, west jog above the bottom row, through
-    the row's 4/5 gap column (11.105), then a deep bottom-band lane at
-    y 46.35 (below every bottom-band escape) east to a column at x 61.55
-    (west of EN's B column), F-hopping the GP19/GP18 exit rows, up to
-    U_INA219_ALT.VS. U_ISNS.VS hangs off that via a B diagonal into a
-    small via-in-pad (0.5/0.3 -- drill at the DFM floor). Whole subtree
-    necked to 0.25mm (mA-level VS/VS supply taps; the 0.5mm Power rail
-    would not clear the row-gap crossings, same precedent as the SWD
-    tree's P3V3 descent)."""
-    p36 = _p(board, "PICO", "36")
-    ina_vs = _p(board, "U_INA219_ALT", "4")   # (62.64,27.33)
-    isns_vs = _p(board, "U_ISNS", "5")        # (65.74,33.65)
-    _route_mixed(board, "P3V3", [
-        ("B", [p36, (p36[0], 39.3)]),
-        ("F", [(p36[0], 39.3), (23.805, 39.3)]),
-        ("B", [(23.805, 39.3), (23.805, 49.65), (61.55, 49.65),
-               (61.55, 46.35)]),
-        ("F", [(61.55, 46.35), (61.55, 42.9)]),
-        ("B", [(61.55, 42.9), (61.55, ina_vs[1])]),
-        ("F", [(61.55, ina_vs[1]), ina_vs]),
-    ], width=0.25)
-    ni = _net(board, "P3V3")
-    if not _track_exists(board, ni.GetNetCode(), pcbnew.F_Cu,
-                         _mm(ina_vs[0] + 0.66, ina_vs[1]), _mm(63.8, ina_vs[1])):
-        _add_track(board, ni, pcbnew.F_Cu,
-                   [(ina_vs[0] + 0.66, ina_vs[1]), (63.8, ina_vs[1])], 0.25)
-        _add_via(board, ni, (63.8, ina_vs[1]), 0.6, 0.3)
-        _add_track(board, ni, pcbnew.B_Cu, [(63.8, ina_vs[1]), isns_vs], 0.25)
-        _add_via(board, ni, isns_vs, 0.5, 0.3)
-
-
-def _route_p3v3_stemma(board):
-    """P3V3 to J_STEMMA.2: J2B.16 (THT) -> F north -> east at y 13.55 ->
-    north column x 24.4 (west of the STEMMA shield pad) -> over the top at
-    y 2.6 -> down into pad 2 from the north."""
-    j2b16 = _p(board, "J2B", "16")   # (12.375,15.6)
-    st2 = _p(board, "J_STEMMA", "2")  # (29.5,5.4)
-    _route_mixed(board, "P3V3", [
-        ("F", [j2b16, (j2b16[0], 13.55), (24.4, 13.55), (24.4, 2.95),
-               (st2[0], 2.95), st2]),
-    ])
-
-
-def _route_v5_jtrace(board):
-    """V5_JTRACE: JP1.1 -> west corridor x 0.9 -> east through J3's
-    inter-pad-row band (y 55.8, between the north row's 55.05 bottom and
-    the south row's 56.55 top) -> drop into J3.11 at its own column.
-    Necked to 0.3mm for the inter-row ride."""
-    jp1_1 = _p(board, "JP1", "1")
-    j3_11 = _p(board, "J3", "11")
-    ni = _net(board, "V5_JTRACE")
-    w = _class_width(board, "V5_JTRACE")
-    _add_path_once(board, ni, pcbnew.F_Cu, [jp1_1, (0.9, jp1_1[1])], w)
-    _add_path_once(board, ni, pcbnew.F_Cu,
-                   [(0.9, jp1_1[1]), (0.9, 55.8), (j3_11[0], 55.8), j3_11], 0.3)
-
-
-def _set_extra_power_classes(board):
-    ns = board.GetDesignSettings().m_NetSettings
-    for n in ("VBUS_SEL", "HOST_5V_IN"):
-        ns.SetNetclassPatternAssignment(n, "Power")
-
-
 def main():
+    """Task 14f scope actually completed: trace bundle, guard nets, the
+    SWD/NRESET/P3V3(VTref) tree, breakout stubs, and internal ties -- all
+    DRC-clean (see .superpowers/sdd/task-14f-report.md). The rest of
+    Task 14f's non-GND nets (power tree, USB legs, dividers, misc GPIO --
+    65 pad-pairs) were attempted but not brought to a DRC-clean state in
+    the time available and are intentionally NOT included here; see that
+    report for the exact remaining pairs and lessons for a follow-up
+    pass. GND stays unrouted throughout for Task 15's pour."""
     b = pcbnew.LoadBoard(BOARD_FILE)
     assert b is not None, f"LoadBoard({BOARD_FILE!r}) returned None"
 
@@ -1126,22 +715,6 @@ def main():
 
     _route_breakout_stubs(b)
     _route_internal_ties(b)
-    _route_local_clusters(b)
-    _route_top_band(b)
-    _route_bottom_band(b)
-    _route_north_bound(b)
-    _route_rims(b)
-    _route_en(b)
-    _route_vbus_sel(b)
-    _route_vbus_net(b)
-    _route_nvd(b)
-    _route_j9_vbus_esd(b)
-    _route_host_vbus(b)
-    _route_p3v3_cluster(b)
-    _route_p3v3_stemma(b)
-    _route_v5_jtrace(b)
-
-    _set_extra_power_classes(b)
 
     pcbnew.SaveBoard(BOARD_FILE, b)
     pcbnew.GetSettingsManager().SaveProject()
