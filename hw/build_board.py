@@ -288,7 +288,8 @@ def _place_pico(fps: dict) -> None:
         brief's literal text) but the USB end ends up at the board's RIGHT.
     The functional requirement (USB/BOOTSEL end overhangs the LEFT edge) is
     the substantive one -- Task 12 will place the debug/trace connectors
-    (J3/J4/J6/J7) near the Pico's trace pins, and matters more than which of
+    (J3/J6/J7 plus a debug row companion connector, later removed in Task
+    14i) near the Pico's trace pins, and matters more than which of
     pin 1 vs pin 40 is nominally "on top". 90 deg is used.
     """
     fp = fps["PICO"]

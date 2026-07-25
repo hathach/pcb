@@ -19,7 +19,7 @@ Routes, on the board saved by `hw/build_board.py --place`:
     jog, so the two paths -- which share the ~1mm y-band between Rt's
     two pads -- diverge instead of crossing.
 
-  - SWDIO, SWCLK: daisy chain J3-J4-J6-J7 via a B_Cu trunk.
+  - SWDIO, SWCLK: daisy chain J3-J6-J7 via a B_Cu trunk.
   - NRESET: PICO.30 -> J3.10 -> J6.10 -> SW1.1 via B_Cu.
   - P3V3 (VTref taps only -- the rest of this net is Task 14's job):
     PICO.36 -> J3.1 -> J6.1 via B_Cu, necked to Default width (0.2mm) for
@@ -27,15 +27,15 @@ Routes, on the board saved by `hw/build_board.py --place`:
     pin-pitch gap with clearance to spare: 0.17mm < 0.2mm required; 0.2mm
     clears with margin, 0.32mm).
 
-  B_Cu is used for all four of these because J3/J4/J6/J7/SW1 are all SMD
+  B_Cu is used for all four of these because J3/J6/J7/SW1 are all SMD
   (F_Cu-only) -- B_Cu is unobstructed under them; only the THT parts
   PICO/J1B/J2B/JP2/JP3 carry B_Cu copper, and only PICO's own header row
   and J1B's breakout row lie on the NRESET/P3V3 descent from PICO (each
   crossed once, through an unused inter-pin gap, same technique as the
-  trace bundle). SWDIO and SWCLK share the same 4 physical connectors, so
+  trace bundle). SWDIO and SWCLK share the same 3 physical connectors, so
   a "shallower" net's full-width B_Cu trunk is unavoidably crossed by a
   "deeper" net's vertical pad-to-trunk run wherever their X ranges
-  overlap (they mostly do, since all four connectors are shared) --
+  overlap (they mostly do, since all three connectors are shared) --
   `_spike_to_trunk` hops each such crossing onto F_Cu (clear in this
   region -- verified empty of copper except a mounting hole far to the
   west) for a short span and back, via two vias.
@@ -146,12 +146,12 @@ _ROW_SAFE_MARGIN_MM = 0.4  # above J3's pad-row top edge: every net's
 # sideways jog while still between the two rows (open, unconstrained by
 # pad pitch there), landing in a south-of-south-row F_Cu band
 # (_SWD_LANE_Y) where SWCLK and P3V3 in turn need only ONE mutual hop
-# (SWCLK is shallow and spans wider -- J3/J4/J6/J7 -- so keeping it
+# (SWCLK is shallow and spans wider -- J3/J6/J7 -- so keeping it
 # shallow means P3V3, which only touches J3/J6, needs just a single hop
 # where its J6 spike must pass SWCLK's line).
 _SWD_TREE = {
-    "SWDIO": [("J3", "2"), ("J4", "3"), ("J6", "2"), ("J7", "3")],
-    "SWCLK": [("J3", "4"), ("J4", "1"), ("J6", "4"), ("J7", "1")],
+    "SWDIO": [("J3", "2"), ("J6", "2"), ("J7", "3")],
+    "SWCLK": [("J3", "4"), ("J6", "4"), ("J7", "1")],
     "NRESET": [("J3", "10"), ("J6", "10"), ("SW1", "1")],
     "P3V3": [("J3", "1"), ("J6", "1")],
 }
@@ -177,7 +177,7 @@ _SWCLK_ESCAPE_X = {"J3": 7.5, "J6": 48.5}  # WEST -- east would cross
                                            # 58.15-59.42) which only
                                            # exists east of J3/J6's own
                                            # columns here
-_ROW_CLEAR_Y = 58.90     # south of J3/J4/J6/J7's north-row pad bottom
+_ROW_CLEAR_Y = 58.90     # south of J3/J6/J7's north-row pad bottom
                          # edge (58.45) by 0.45mm -- SWCLK's safe y to
                          # jog sideways in before continuing down
 # P3V3's PICO descent: gap pins 1/2 (x=3.485, PICO's own westmost gap),
@@ -438,7 +438,7 @@ def _spike_to_trunk(board, ni, px, py, trunk_y, width_mm, via_dia, via_drill, sh
 
 
 def _route_swd_tree_bcu(board, net_name, shallower, pico_gap=None):
-    """B_Cu trunk at _SWD_LANE_Y[net_name], via-per-node (J3/J4/J6/J7/SW1
+    """B_Cu trunk at _SWD_LANE_Y[net_name], via-per-node (J3/J6/J7/SW1
     pads are all F_Cu-only SMD), hopping over any already-routed
     *shallower* B_Cu trunk via `_spike_to_trunk`. Only SWDIO uses this
     path now (see module-level comment) -- kept general in case a future
@@ -479,7 +479,7 @@ def _route_swd_tree_bcu(board, net_name, shallower, pico_gap=None):
 
 
 def _route_swclk(board):
-    """SWCLK: plain F_Cu throughout, no vias -- J3/J4/J6/J7 pads are all
+    """SWCLK: plain F_Cu throughout, no vias -- J3/J6/J7 pads are all
     F_Cu-only SMD. Skips the tight inter-row gap (SWDIO/NRESET's B_Cu
     territory -- different layer, so no clearance conflict either way,
     but the gap has no room left regardless) and descends straight to
@@ -488,8 +488,8 @@ def _route_swclk(board):
     (10.445/51.13) sit directly above a south-row GND pad at the *same*
     x, so those two nodes jog to a connector-clear column
     (_SWCLK_ESCAPE_X) while still between the rows (open, unconstrained
-    by row pad pitch) before continuing down; J4/J7 are simple single-row
-    headers with nothing blocking below, so they descend directly."""
+    by row pad pitch) before continuing down; J7 is a simple single-row
+    header with nothing blocking below, so it descends directly."""
     ni = _net(board, "SWCLK")
     if _net_has_tracks(board, ni):
         return
@@ -1982,7 +1982,28 @@ def _route_final_long_runs(board):
     All three nets are Power netclass (0.5mm track, 0.25mm halfwidth) --
     every margin below accounts for that, not the 0.2mm Default width
     used everywhere else in this file.
+
+    Review fix (Task 14i): a 1 oz/0.2mm neck is only 0.745A-rated (IPC-2221,
+    10C rise) -- fine for a genuine tight-pitch crossing, marginal for
+    VBUS_SEL's ~650-760mA worst case over any real length. VBUS_NET's and
+    VBUS_SEL's own long vertical runs at x=16.185/31.425 cross PICO row2
+    (y=23.11) and J2B's mirrored row (y=15.6) -- 1.6/1.7mm round pads on a
+    2.54mm pitch, 1.27mm each side of the gap column, same geometry
+    `_route_pico_row_jog` already resolved for vias (its ROW2_HOP/J2B_HOP
+    margins) -- so only a short band around each row actually needs the
+    0.2mm neck; the rest of each run goes back to full 0.5mm Power width.
     """
+    ROW2_NECK_MM = (23.11 - 0.85, 23.11 + 0.85)  # matches _route_pico_row_jog's ROW2_HOP
+    J2B_NECK_MM = (15.6 - 0.6, 15.6 + 0.6)        # matches _route_pico_row_jog's J2B_HOP
+    # DRC-discovered (Task 14i): VBUS_NET's x=16.185 column also passes
+    # close to two OTHER Power-class nets' own hop-vias -- V5_JTRACE's at
+    # (15.5/16.9, 27.5) and VBUS_SEL's at (15.5, 13.0) -- both only
+    # ~0.685-0.715mm away in X, just short of the 0.75mm a Power-width
+    # track+via pair needs (0.3 via r + 0.25 track halfwidth + 0.2
+    # clearance) at zero Y-offset; +-0.5mm clears both with margin.
+    V5J_NECK_MM = (27.5 - 0.5, 27.5 + 0.5)
+    SEL_HOP_NECK_MM = (13.0 - 0.5, 13.0 + 0.5)
+
     w_default = pcbnew.ToMM(
         board.GetDesignSettings().m_NetSettings.GetDefaultNetclass().GetTrackWidth()
     )
@@ -2053,14 +2074,17 @@ def _route_final_long_runs(board):
     #   5. A single F_Cu hop at y=36.0, x=31.0-15.5, clearing I2C0_SCL's
     #      (30.155) and I2C0_SDA's (27.615) verticals AND NRESET's
     #      diagonal (which passes through ~x=24.7 at this y) all at once,
-    #      landing west of all three.
+    #      landing west of all three -- pure layer-hop clearance, no
+    #      pin-pitch row nearby, so full Power width (Task 14i review fix).
     #   6. B_Cu the rest of the way: to x=16.185 (PICO's own gap between
     #      AREF/GP28, 14.915/17.455 -- NOT x=21.265, DEV_VBUS_DET's own
     #      reserved column, which has a hop-via sitting right at y=35.0),
     #      north to y=9.3 (comfortably north of JP1's whole pin row,
     #      10.655), west to JP1.3's own column, then south onto the pad --
     #      approaching from directly above so it never sweeps past
-    #      JP1.1/JP1.2's own Y.
+    #      JP1.1/JP1.2's own Y. Full Power width throughout except two
+    #      short Default-width bands where this column crosses PICO row2
+    #      (y=23.11) and J2B's mirrored row (y=15.6) (Task 14i review fix).
     ni_dvd_net = ni_net
     d_j9 = _pos(_pad(board, "D_J9_BUSPWR", "2"))
     if not _track_exists(board, ni_dvd_net.GetNetCode(), pcbnew.F_Cu, _mm(*d_j9), _mm(70.0, d_j9[1])):
@@ -2071,23 +2095,45 @@ def _route_final_long_runs(board):
         _add_track(board, ni_dvd_net, pcbnew.F_Cu, [(67.8, 49.2), (66.2, 49.2)], w_net)
         _add_via(board, ni_dvd_net, (66.2, 49.2), via_dia_net, via_drill_net)
         _add_track(board, ni_dvd_net, pcbnew.B_Cu, [(66.2, 49.2), (33.965, 49.2)], w_net)
-        # Necks down to Default width (0.2mm, not Power's 0.5mm) from
-        # here on -- the vertical at x=33.965 has to cross J1B's own row
-        # (47.8, 1.7mm PTH pads on a uniform 2.54mm pitch), and its own
-        # half-pitch, 1.27mm, is JUST short of the >=1.3mm a Power-class
-        # track/via needs from either neighboring pad (DRC-confirmed,
-        # every candidate X in the row has the identical shortfall) --
-        # but comfortably clears the >=1.15mm a Default-width track
-        # needs, matching this file's established tight-pitch precedent
-        # (neck to Default for a short low-current final approach).
+        # Necks down to Default width (0.2mm, not Power's 0.5mm) for this
+        # one leg -- the vertical at x=33.965 has to cross J1B's own row
+        # (47.8, 1.7mm PTH pads on a uniform 2.54mm pitch) AND PICO's own
+        # row1 (40.89), and its own half-pitch, 1.27mm, is JUST short of
+        # the >=1.3mm a Power-class track/via needs from either
+        # neighboring pad (DRC-confirmed, every candidate X in the row has
+        # the identical shortfall) -- but comfortably clears the
+        # >=1.15mm a Default-width track needs, matching this file's
+        # established tight-pitch precedent (neck to Default for a short
+        # low-current crossing). Everything downstream of here reverts to
+        # full Power width except two short bands where the x=16.185
+        # vertical (step 6) crosses row2/J2B in turn -- see Task 14i's
+        # review-fix comments below.
         _add_track(board, ni_dvd_net, pcbnew.B_Cu,
                    [(33.965, 49.2), (33.965, 36.0), (31.0, 36.0)], w_default)
         _add_via(board, ni_dvd_net, (31.0, 36.0), via_dia_net, via_drill_net)
-        _add_track(board, ni_dvd_net, pcbnew.F_Cu, [(31.0, 36.0), (15.5, 36.0)], w_default)
+        # Review fix (Task 14i): this F_Cu hop is pure B_Cu-obstacle
+        # clearance (step 5 above -- I2C0_SCL/I2C0_SDA/NRESET) with no
+        # pin-pitch row anywhere nearby, unlike the B_Cu leg above (which
+        # must stay Default width to cross J1B's row) -- runs at full
+        # Power width.
+        _add_track(board, ni_dvd_net, pcbnew.F_Cu, [(31.0, 36.0), (15.5, 36.0)], w_net)
         _add_via(board, ni_dvd_net, (15.5, 36.0), via_dia_net, via_drill_net)
-        _add_track(board, ni_dvd_net, pcbnew.B_Cu,
-                   [(15.5, 36.0), (16.185, 36.0), (16.185, 9.3),
-                    (jp1_3[0], 9.3), jp1_3], w_default)
+        _add_track(board, ni_dvd_net, pcbnew.B_Cu, [(15.5, 36.0), (16.185, 36.0)], w_default)
+        # Review fix (Task 14i): the long vertical only needs to neck down
+        # to Default width where it actually crosses PICO row2 (23.11),
+        # J2B's mirrored row (15.6), or the two other nets' hop-vias
+        # (V5J_NECK_MM/SEL_HOP_NECK_MM, see docstring) -- full Power width
+        # elsewhere.
+        _add_track(board, ni_dvd_net, pcbnew.B_Cu, [(16.185, 36.0), (16.185, V5J_NECK_MM[1])], w_net)
+        _add_track(board, ni_dvd_net, pcbnew.B_Cu, [(16.185, V5J_NECK_MM[1]), (16.185, V5J_NECK_MM[0])], w_default)
+        _add_track(board, ni_dvd_net, pcbnew.B_Cu, [(16.185, V5J_NECK_MM[0]), (16.185, ROW2_NECK_MM[1])], w_net)
+        _add_track(board, ni_dvd_net, pcbnew.B_Cu, [(16.185, ROW2_NECK_MM[1]), (16.185, ROW2_NECK_MM[0])], w_default)
+        _add_track(board, ni_dvd_net, pcbnew.B_Cu, [(16.185, ROW2_NECK_MM[0]), (16.185, J2B_NECK_MM[1])], w_net)
+        _add_track(board, ni_dvd_net, pcbnew.B_Cu, [(16.185, J2B_NECK_MM[1]), (16.185, J2B_NECK_MM[0])], w_default)
+        _add_track(board, ni_dvd_net, pcbnew.B_Cu, [(16.185, J2B_NECK_MM[0]), (16.185, SEL_HOP_NECK_MM[1])], w_net)
+        _add_track(board, ni_dvd_net, pcbnew.B_Cu, [(16.185, SEL_HOP_NECK_MM[1]), (16.185, SEL_HOP_NECK_MM[0])], w_default)
+        _add_track(board, ni_dvd_net, pcbnew.B_Cu, [(16.185, SEL_HOP_NECK_MM[0]), (16.185, 9.3)], w_net)
+        _add_track(board, ni_dvd_net, pcbnew.B_Cu, [(16.185, 9.3), (jp1_3[0], 9.3), jp1_3], w_default)
 
     # V5_JTRACE: JP1.1 (9.96,10.655) -> J3.11 (already has a short F_Cu
     # stub from its own side, 15.525,61.15 -> 16.795,61.15). J3.11 sits
@@ -2209,9 +2255,17 @@ def _route_final_long_runs(board):
         _add_via(board, ni_sel2, (31.425, 24.4), via_dia_sel2, via_drill_sel2)
         # Necks to Default width for the same reason as VBUS_NET's own
         # final approach above -- the row2/J2B gap crossing (1.27mm each
-        # side) is short of what a Power-class track needs.
+        # side) is short of what a Power-class track needs. Review fix
+        # (Task 14i): only the two short bands actually crossing row2/J2B
+        # need the neck -- the rest of the vertical, and the y=13.0
+        # horizontal run (clear of both rows), go back to full Power
+        # width.
+        _add_track(board, ni_sel2, pcbnew.B_Cu, [(31.425, 24.4), (31.425, ROW2_NECK_MM[1])], w_sel2)
+        _add_track(board, ni_sel2, pcbnew.B_Cu, [(31.425, ROW2_NECK_MM[1]), (31.425, ROW2_NECK_MM[0])], w_default)
+        _add_track(board, ni_sel2, pcbnew.B_Cu, [(31.425, ROW2_NECK_MM[0]), (31.425, J2B_NECK_MM[1])], w_sel2)
+        _add_track(board, ni_sel2, pcbnew.B_Cu, [(31.425, J2B_NECK_MM[1]), (31.425, J2B_NECK_MM[0])], w_default)
         _add_track(board, ni_sel2, pcbnew.B_Cu,
-                   [(31.425, 24.4), (31.425, 13.0), (17.0, 13.0)], w_default)
+                   [(31.425, J2B_NECK_MM[0]), (31.425, 13.0), (17.0, 13.0)], w_sel2)
         _add_via(board, ni_sel2, (17.0, 13.0), via_dia_sel2, via_drill_sel2)
         _add_track(board, ni_sel2, pcbnew.F_Cu, [(17.0, 13.0), (15.5, 13.0)], w_default)
         _add_via(board, ni_sel2, (15.5, 13.0), via_dia_sel2, via_drill_sel2)
