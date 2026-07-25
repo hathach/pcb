@@ -146,6 +146,30 @@ POS: dict[str, tuple[float, float, float]] = {
     "SW1": (79.06, 59.955, 0),
     "C_NRESET": (79.06, 55.395, 0),
 
+    # --- J10 (Task 14h): dupont-wire SWD header, in the debug row's only
+    # free X gap (J6 courtyard right edge 56.125 -> J7 courtyard left edge
+    # 66.125, a 10mm span): rot=90 (pitch runs +X, matching J_UART/JP1/JP4)
+    # puts J10's own courtyard at x 56.785-65.495 -- 0.66mm clear of J6 and
+    # J7 on either side (no footprint-courtyard overlap).
+    # Y is NOT the row's own y=59.2: that sits exactly in the 1.5mm
+    # inter-row gap straddled by the existing SWDIO (B_Cu, y=58.80) and
+    # NRESET (B_Cu, y=59.42) trunk lines, which run the *entire* width of
+    # this gap (J6->J7) already -- a THT pad there (1.7mm dia, 0.85mm
+    # radius) physically overlaps both trunks regardless of which net it's
+    # on (confirmed via DRC: `shorting_items` NRESET-SWCLK and SWDIO-SWCLK,
+    # plus solder_mask_bridge, when first tried at y=59.2). The board is
+    # too short (64mm) to go south of the SWCLK/P3V3 F_Cu/B_Cu lanes
+    # (y=62.65/62.90) with 0.5mm edge clearance to spare. Going north
+    # instead: y=57.5 clears SWDIO (58.80) by 1.30mm and NRESET (59.42) by
+    # 1.92mm -- both > the 1.15mm minimum (0.85mm pad radius + 0.2mm
+    # clearance + 0.1mm track halfwidth) -- and that x/y cell is otherwise
+    # empty (verified: only J6/J7 courtyards and the two trunk tracks
+    # occupy this region; no other pads/tracks/vias). Re-verified via DRC
+    # after the move: identical 7 pre-existing violations (5 clearance on
+    # unrelated/DNP U_INA219_ALT + 2 silk_edge_clearance) as the unmodified
+    # board, zero new ones.
+    "J10": (58.6, 57.5, 90),
+
     # --- Top-left power corner: JP1 clear of the left edge/MH1 (a Task 14e
     # fix, unrelated to the THT revert -- kept); JP4 east of JP1; J8 on the
     # top edge (mating face at y ~= -0.1); power LED pair between JP1 and

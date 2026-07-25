@@ -108,6 +108,10 @@ _add(Part("J4", "JST-SH-3 DEBUG", "jst_sh3", _pins("1", "2", "3")))     # SWCLK/
 _add(Part("J6", "CORTEX-10", "cortex10", _numbered(10)))
 _add(Part("J7", "JST-SH-3 DEBUG_PROBE", "jst_sh3", _pins("1", "2", "3")))
 _add(Part("SW1", "RESET", "button", _pins("1", "2")))
+# J10 (Task 14h, user request): dupont-wire SWD access alongside the JST-SH
+# ones (J4/J7) -- 3-pin THT pin header, same pin order (1=SWCLK, 2=GND,
+# 3=SWDIO) so every SWD connector on the board reads the same.
+_add(Part("J10", "SWD", "hdr_1x03", _pins("1", "2", "3")))
 
 # --- USB connectors ------------------------------------------------------
 # J5 USB-A (Molex 67643): standard USB-A pinout, pad 5 is the mechanical
@@ -310,6 +314,11 @@ PARTS["J4"].pins.update({"1": "SWCLK", "3": "SWDIO"})
 PARTS["J7"].pins.update({"1": "SWCLK", "3": "SWDIO"})
 PARTS["J3"].pins.update({"2": "SWDIO", "4": "SWCLK"})
 PARTS["J6"].pins.update({"2": "SWDIO", "4": "SWCLK"})
+
+# J10 (Task 14h, added after the Task 4/5 passes -- wired here in one shot
+# since it has no earlier partial state): same SWCLK/GND/SWDIO fan-out as
+# J4/J7.
+PARTS["J10"].pins.update({"1": "SWCLK", "2": "GND", "3": "SWDIO"})
 
 # J6 grounds deferred from Task 4 (ruling): pins 3/5/9 -> GND.
 PARTS["J6"].pins.update({"3": "GND", "5": "GND", "9": "GND"})

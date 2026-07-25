@@ -314,6 +314,28 @@ def _place_pico(fps: dict) -> None:
     fp.SetPosition(_mm(dx, dy))
 
 
+def _clear_antenna_keepout(b) -> None:
+    """Task 14h: PICO's footprint carries a rule area named "Antenna Copper
+    Keep Out" (DoNotAllowTracks/Vias/CopperPour all True), inherited from the
+    Pico *W*'s antenna -- this board never populates a Pico W (only Pico 2 /
+    original Pico, see PLAN.md's Global Constraints), and the socket carrier
+    lifts the module ~8.5mm off the PCB, so the zone's real-world rationale
+    (RF keepout under an antenna trace) does not apply here. It sits
+    squarely in the board's centre and blocked routing for ~14 low-speed
+    nets (task-14f-report.md). Per explicit user authorization, clear the
+    three restriction flags so routing/pour may use the area -- the zone
+    itself is left in place (not removed) as documentation: deleting a
+    footprint-owned zone is a documented pcbnew-9.0.2 corruption trigger
+    (see _add_footprints'/_draw_outline's docstrings on BOARD.Remove()).
+    """
+    for fp in b.GetFootprints():
+        for z in fp.Zones():
+            if z.GetZoneName() == "Antenna Copper Keep Out":
+                z.SetDoNotAllowTracks(False)
+                z.SetDoNotAllowVias(False)
+                z.SetDoNotAllowCopperPour(False)
+
+
 def main(do_place: bool = False) -> None:
     b = pcbnew.LoadBoard(BOARD_FILE)
     assert b is not None, f"LoadBoard({BOARD_FILE!r}) returned None"
@@ -321,6 +343,7 @@ def main(do_place: bool = False) -> None:
     fps = _add_footprints(b)
     nets = _add_nets(b)
     _wire_pads(fps, nets)
+    _clear_antenna_keepout(b)
 
     _add_mounting_holes(b)
     _place_pico(fps)
