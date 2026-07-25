@@ -1,13 +1,15 @@
-"""Placement coordinate table for Task 14e (re-placement for the SMT
-footprints introduced in Task 14d/14d-fix: PicoSocket_2x20_SMD with pads
-offset 1.65mm outward from the pin grid, J1B/J2B stock
-PinSocket_1x20_..._SMD_Pin1Left (zigzag +-1.65mm, symmetric about the row
-centre -- NOT pin-1-anchored like the old custom footprint), J5
-USB_A_Receptacle_GCT_USB1046, JP1-4/J_UART stock _SMD_Pin1Left headers.
-Every coordinate below was re-derived from the *actual* on-board courtyard/
-pad geometry (queried via pcbnew, not guessed) -- see
-.superpowers/sdd/task-14e-report.md for the derivation and the full
-region-by-region rationale.
+"""Placement coordinate table for Task 14g (revert to THT connectors:
+pico_socket -> stock RaspberryPi_Pico_Common_THT (40 THT pads "1".."40",
+ON-GRID at the nominal pin positions -- no more 1.65mm outward SMD offset),
+breakout_1x20 -> stock PinSocket_1x20_P2.54mm_Vertical (THT, PIN-1-ANCHORED
+-- unlike the SMD_Pin1Left variant it replaces, which anchored at the row's
+geometric centre), hdr_1x02/hdr_1x03 -> stock PinHeader_1x0N_P2.54mm_Vertical
+(THT, also pin-1-anchored). Every coordinate below was re-derived from the
+*actual* on-board courtyard/pad geometry (queried via pcbnew, not guessed) --
+see .superpowers/sdd/task-14g-report.md for the derivation. Coordinates for
+parts whose footprint did NOT change and whose position does not depend on
+PICO's own pad grid (Rt1-5 excepted -- see below) are carried over unchanged
+from Task 14e's SMD-era table.
 
 POS: dict[ref -> (x_mm, y_mm, rotation_deg)] for every PARTS ref except PICO
 (placed by build_board.py's `_place_pico`); MH1-4 are placed by
@@ -15,49 +17,78 @@ POS: dict[ref -> (x_mm, y_mm, rotation_deg)] for every PARTS ref except PICO
 
 Coordinate frame: origin (0,0) top-left, mm, Y-down. Built against
 BOARD_W_MM=92, BOARD_H_MM=64 (build_board.py) -- PICO center y = 32. With the
-new PicoSocket_2x20_SMD, its own pad rows sit at y=42.515 (pads 1-20) and
-y=21.435 (pads 21-40), pad-grid x 0.315..48.575 (centre x=24.445); courtyard
-x -1.0..49.89, y 20.19..43.81. Re-derive POS if the board size or any
-footprint changes.
+reverted RaspberryPi_Pico_Common_THT, its own pad rows sit at y=40.89
+(pads 1-20) and y=23.11 (pads 21-40), pad-grid x 2.215..50.475 (2.54mm pitch,
+on-grid); courtyard x -1.0..52.94, y 20.415..43.585 -- this is *exactly* the
+pre-Task-14d (Task 12/14c) THT geometry, since PICO's own footprint and
+`_place_pico`'s courtyard-based placement formula were never touched by the
+SMD detour. Re-derive POS if the board size or any footprint changes.
 
-Vertical budget (bottom-side chain, PICO courtyard bottom 43.81 -> board
-bottom 64, 20.19mm total): Rt row (1.95mm, hard against PICO) + 0.3mm gap +
-J1B (6.29mm, its real courtyard perpendicular width -- the stock zigzag
-footprint is ~3x fatter than Task 14c's custom outward-offset one) + 0.3mm
-gap + the debug row's 8.67mm courtyard (J3/J6, the tallest of the group) =
-17.31mm, leaving ~2.9mm to the board edge. This is why JP2/JP3 (each another
-6.17mm-tall band) do NOT fit as a 5th stacked band in this column -- see the
-JP2/JP3 note below for where they actually landed. Board width unchanged at
-92mm, under the 100mm JLC tier.
+Vertical budget (bottom-side chain, PICO courtyard bottom 43.585 -> board
+bottom 64): Rt row (courtyard 43.825..45.775, hard against PICO, UNCHANGED --
+its X/Y values already land exactly on PICO's THT pad columns, 0.00mm error,
+see the Rt note below) + J1B (courtyard 46.005..49.645, only 3.64mm
+perpendicular-width now -- the *stock THT* footprint, not the SMD zigzag
+Task 14e sized this budget around) + a 5.22mm gap (49.645..54.865) that now
+comfortably fits the relocated JP2/JP3 guard jumpers (rot=90, 3.63mm tall)
+plus the "unplug while tracing" silk text + the debug row's existing 54.865+
+courtyard (J3/J6, unchanged, still at y=59.2). THT shrinks J1B enough that
+the JP2/JP3-in-the-gap placement Task 14e's report ruled out for the fat SMD
+footprint fits again. Board width unchanged at 92mm, under the 100mm JLC
+tier.
 
 Region notes (co-design against hw/route_trace.py, which reads all pad
 positions at runtime -- the two files are a matched pair; 14f re-derives its
 own lane constants against these coordinates):
-  - J1B/J2B: X-CENTRE MUST equal PICO's pad-grid centre (24.445) -- the stock
-    footprint's anchor is the row's geometric centre, not pin 1 (Task 14d-fix
-    kept the OLD custom-footprint anchor convention in the stale POS values,
-    which put J1B/J2B's pad columns ~22-26mm off from PICO's own columns,
-    part of J1B even landing off the left board edge). J1B sits outboard
-    (south) of PICO row1 at y=49.22; J2B outboard (north) of row2 at
-    y=16.745. Rt1-5 unchanged (already hard against PICO, no collision).
-  - JP2/JP3 (GP0/GP6 guard jumpers): do NOT fit in the J1B->debug-row gap (see
-    vertical-budget note above) or beside Rt1-5 (any Y-band spanning Rt's
-    columns is inside J1B's own 48mm-wide footprint) -- relocated east of
-    J1B's row-end, same Y-band as J1B (rot=0, minimises their Y-footprint),
-    at x=54.245/61.455 (JP3 also dropped 0.54mm to clear R_DPU, the device
-    cluster's nearest part). A longer GP0/GP6 guard trace in 14f is the
-    trade-off.
-  - Debug row (J3/J4/J6/J7): spaced >=10mm courtyard-to-courtyard (new hard
-    invariant -- plug-grip room), y=59.2. The vertical budget's ~2.7mm of
-    unused slack (board bottom 64 minus the row's minimum-gap position of
-    57.0) is spent here rather than left idle, opening a real gap between
-    J1B and the debug row for the "unplug while tracing" silk text (moved
-    from its old y=50.6, now inside J1B's much taller footprint, to
-    y=53.6). J3 x=14.89 keeps the PICO-pad-2 -> J3-pad-12 span well under
-    the 25mm target. SW1 (button, not a plug connector, exempt from the
-    10mm rule) trails at x=79.06 but drops further to y=59.955 -- its
-    shorter 7.49mm courtyard clears the device cluster's D_J9_BUSPWR above
-    it. C_NRESET rides just above SW1.
+  - Rt1-5: UNCHANGED (4.755/9.835/12.375/14.915/17.455, y=44.8, rot=90) --
+    verified these already sit at EXACTLY the new THT PICO pad-grid X
+    columns for pads 2/4/5/6/7 (0.00mm error) with the same "hard against"
+    Y gap (~0.24mm from PICO's new courtyard bottom) as before. These
+    coordinates were never touched by the SMD detour (Task 14e's own report:
+    "Rt1-5 unchanged, hard against PICO") -- they were designed against this
+    exact THT grid back in Task 12 and are simply correct again now that
+    PICO is THT once more.
+  - J1B/J2B: the reverted breakout footprint anchors at PIN 1, not the row
+    centre -- so J1B's/J2B's POS *is* pad 1's world position outboard of
+    PICO pad 1/pad 21 respectively (both stock parts share the identical
+    2.54mm pitch and pad-1-first numbering convention as PICO's own THT
+    grid, so every one of the 20 pads lands EXACTLY on its PICO partner's X,
+    by construction -- not approximated). J1B = PICO pad "1" position
+    (2.215, 40.89) + 6.91mm south -> (2.215, 47.8), rot=90 (row runs +X with
+    increasing pad number, matching PICO pads 1->20 running west->east).
+    J2B = PICO pad "21" position (50.475, 23.11) + 7.51mm north ->
+    (50.475, 15.6), rot=270 (row runs -X with increasing pad number,
+    matching PICO pads 21->40 running east->west). These are the exact
+    values Task 12/14c's THT-era place.py used (git show 4fb3f47:hw/place.py)
+    -- re-verified against fresh pcbnew geometry, not just copied blind.
+  - JP1/JP4/J_UART (hdr_1x03/hdr_1x02, top power corner): Task 14e's SMD-era
+    top-corner layout (J8/LED_PWR/MH1 arrangement) is kept as-is -- it fixed
+    real stale-position defects (JP1 crowding the left edge/MH1) that were
+    NOT caused by the SMD footprint and would reappear if this task blindly
+    restored the pre-14d numbers. Only the header anchors move: the old
+    _SMD_Pin1Left footprint anchored at the row's centre, so its pin "1" sat
+    at a zigzag-offset world position; the new THT footprint's pin "1" *is*
+    the anchor. New POS = old (Task 14e) pad-"1" world position exactly, so
+    the row occupies the identical world rectangle as before (same pitch,
+    same numbering direction), just without the SMD zigzag's perpendicular
+    stagger (each row is now a straight, and physically slimmer, line) --
+    verified this reproduces the old courtyard's L/R (row-direction) extent
+    to the sub-mm, so no new collisions with MH1/J8/R_NVD/etc.
+  - JP2/JP3 (GP0/GP6 guard jumpers): relocated into the J1B -> debug-row gap
+    (now 5.22mm tall, see the vertical-budget note), rot=90 so each header's
+    2.54mm pitch runs along X (3.63mm tall, fits the gap) instead of Y.
+    Pin "1" (the guarded GPIO) anchors EXACTLY on its PICO partner's X: JP2 =
+    PICO pad "1"/GP0's x (2.215), JP3 = PICO pad "9"/GP6's x (22.535), both
+    at y=52.255 (vertically centred in the gap, 0.795mm clear of J1B above
+    and the debug row below). Straight-line guard-trace runs collapse from
+    the SMD-era's 42-50mm (JP2/JP3 relocated east of J1B's row-end, per Task
+    14e's report) down to ~11.4mm (JP2) / ~11.9mm (JP3) -- see the gate
+    report for the exact figures.
+  - Debug row (J3/J4/J6/J7): UNCHANGED (footprint untouched, not PICO-grid-
+    dependent) -- still >=10mm courtyard-to-courtyard, y=59.2. J3 x=14.89
+    keeps the PICO-pad-"2" -> J3-pad-12 span well under the 30mm hard limit
+    (recomputed for the new PICO pad "2" position -- see the gate report).
+    SW1/C_NRESET unchanged.
   - Top peripherals (JP1/JP4/J8/J_STEMMA/LED pairs/R_NVD/J_UART) live in
     y<=13.6 (above J2B's new courtyard top). J8/J_STEMMA (true cable
     receptacles) keep >=10mm clear of each other; JP1/JP4/J_UART (vertical
@@ -90,20 +121,21 @@ POS: dict[str, tuple[float, float, float]] = {
     "Rt4": (14.915, 44.8, 90),
     "Rt5": (17.455, 44.8, 90),
 
-    # --- Breakout rows: X-centre = PICO's pad-grid centre (24.445), so every
-    # pad lands directly outboard of its PICO/socket pad (stock footprint's
-    # anchor is the row centre, not pin 1 -- see module docstring).
-    "J1B": (24.445, 49.22, 90),
-    "J2B": (24.445, 16.745, 270),
+    # --- Breakout rows: POS = pin "1"'s world position (stock footprint is
+    # pin-1-anchored, not centre-anchored -- see module docstring). Every pad
+    # lands exactly outboard of its PICO partner pad by construction.
+    "J1B": (2.215, 47.8, 90),
+    "J2B": (50.475, 15.6, 270),
 
-    # --- Guard jumpers (GP0/GP6 -> GND): relocated east of J1B's row-end,
-    # same Y-band as J1B -- no vertical room remains beside Rt1-5 or in the
-    # J1B->debug-row gap now that J1B's real courtyard is 6.29mm tall (see
-    # module docstring's vertical-budget note).
-    "JP2": (54.245, 49.22, 0),
-    "JP3": (61.455, 49.76, 0),
+    # --- Guard jumpers (GP0/GP6 -> GND): back in the J1B->debug-row gap
+    # (fits again now that J1B's THT courtyard is only 3.64mm tall -- see
+    # module docstring's vertical-budget note), rot=90 so the 2-pad row runs
+    # along X. Pin "1" (the guarded GPIO) anchors exactly on PICO pad "1"/"9"
+    # x respectively.
+    "JP2": (2.215, 52.255, 90),
+    "JP3": (22.535, 52.255, 90),
 
-    # --- Debug connector row (y 57.0): >=10mm courtyard-to-courtyard so a
+    # --- Debug connector row (y 59.2): >=10mm courtyard-to-courtyard so a
     # ribbon/JST plug can be gripped without fouling its neighbour. SW1
     # trails the row but drops to y 59.955 (its courtyard is 1.18mm shorter
     # than J3/J6's) to clear D_J9_BUSPWR above it; C_NRESET rides above SW1.
@@ -114,12 +146,13 @@ POS: dict[str, tuple[float, float, float]] = {
     "SW1": (79.06, 59.955, 0),
     "C_NRESET": (79.06, 55.395, 0),
 
-    # --- Top-left power corner: JP1 shifted off the left edge (its SMD
-    # pads were spilling past Edge.Cuts at the old x=2.215) and clear of
-    # MH1 (below it, not beside); JP4 east of JP1; J8 on the top edge
-    # (mating face at y ~= -0.1); power LED pair between JP1 and JP4.
-    "JP1": (12.5, 9.0, 90),
-    "JP4": (21.0, 9.0, 90),
+    # --- Top-left power corner: JP1 clear of the left edge/MH1 (a Task 14e
+    # fix, unrelated to the THT revert -- kept); JP4 east of JP1; J8 on the
+    # top edge (mating face at y ~= -0.1); power LED pair between JP1 and
+    # JP4. JP1/JP4 POS = pin "1"'s Task-14e world position (row-direction
+    # extent reproduced exactly -- see module docstring).
+    "JP1": (9.96, 10.655, 90),
+    "JP4": (19.73, 10.655, 90),
     "J8": (29.4, 3.9, 180),
     "LED_PWR": (4.0, 9.6, 270),
     "R_LED_PWR": (4.0, 12.1, 90),
@@ -136,7 +169,7 @@ POS: dict[str, tuple[float, float, float]] = {
     "J_STEMMA": (48.1, 3.9, 180),
     "LED_USER": (56.3, 8.6, 270),
     "R_LED_USER": (56.3, 11.6, 90),
-    "J_UART": (61.8, 9.0, 90),
+    "J_UART": (59.26, 10.655, 90),
     "SW_USER": (71.5, 7.5, 0),
 
     # --- Host USB-A cluster: re-aligned to J5's real GCT1046 pad rows
@@ -175,16 +208,17 @@ POS: dict[str, tuple[float, float, float]] = {
     "J9": (88.255, 45.0, 90),
 }
 
-# Trace silk (G-4): warning text in the J1B -> debug-row gap, centered under
-# the GP1..GP5 breakout span.
+# Trace silk (G-4): warning text in the J1B -> debug-row gap, centred in the
+# clear window between the (Task 14g) relocated JP2/JP3 guard jumpers.
 TRACE_SILK_TEXT = "unplug while tracing"
-TRACE_SILK_POS = (11.1, 53.6)
-TRACE_SILK_SIZE_MM = 1.0
+TRACE_SILK_POS = (13.65, 52.255)
+TRACE_SILK_SIZE_MM = 0.8
 TRACE_SILK_THICKNESS_MM = 0.15
 
-# Board identification silk (Adafruit-practice pass, G-4): the Pico carrier's
-# own footprint (pico2_trace:PicoSocket_2x20_SMD) already carries a pin-1 dot
-# + "USB END" orientation label, so nothing extra is needed there. Placed in
+# Board identification silk (Adafruit-practice pass, G-4): the reverted
+# (Task 14g) stock RaspberryPi_Pico_Common_THT footprint already carries its
+# own "USB Cable"/"Possible Antenna"/"Keep Out" orientation silk, so nothing
+# extra is needed there. Placed in
 # the open corridor between the host/power clusters (nothing else lives at
 # x 50..60, y 30..40 -- that column is reserved for 14f's gap-crossing
 # routing lanes, which live on copper layers and don't conflict with silk).

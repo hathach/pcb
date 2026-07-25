@@ -6,46 +6,47 @@ other library is stock KiCad (`/usr/share/kicad/footprints/<lib>.pretty/`).
 """
 
 FP = {
-    # Task 14d (SMT footprint migration / THT elimination): pico_socket and
-    # breakout_1x20 first pointed at custom SMD-socket footprints generated
-    # by hw/gen_sockets.py, each with an NPTH clearance hole under every pin
-    # so a THT-style pin could still pass through the board. usb_a swaps the
-    # all-THT Molex 67643 for the GCT USB1046 (SMD signal pads, 2 THT
-    # mounting posts kept -- mechanically required). hdr_1x02/hdr_1x03/
-    # hdr_1x06 swap to the stock "_SMD_Pin1Left" variants (hdr_1x06
-    # currently has no PARTS consumer -- J_TRACE_TP was removed from the
-    # model in Task 14c -- kept here for forward consistency per the
-    # Task 14d brief).
+    # Task 14d/14d-fix (SMT footprint migration / THT elimination, now
+    # REVERTED by Task 14g): pico_socket, breakout_1x20 and the hdr_1x0N
+    # headers were briefly SMD (a custom-generated PicoSocket_2x20_SMD, the
+    # stock "_SMD_Pin1Left" breakout socket, and stock "_SMD_Pin1Left"
+    # headers) to cut PCBA cost. Reverted: parts taking repeated hand
+    # insertion force stay THT -- SMD 2.54mm sockets/headers have little pad
+    # area to resist insertion/removal, are niche/expensive, and (the
+    # concrete trigger) PicoSocket_2x20_SMD's land pattern, while derived
+    # from a real part's numbers, was never itself a traced, orderable
+    # footprint -- the project's largest remaining fab risk. usb_a still
+    # swaps the all-THT Molex 67643 for the GCT USB1046 (SMD signal pads, 2
+    # THT mounting posts kept -- mechanically required); that migration
+    # (Task 14d) stands, since a USB-A receptacle isn't hand-inserted
+    # repeatedly the way a socket/header is.
     #
-    # Task 14d-fix (blind-bottom sockets, no through-holes -- the pins
-    # bottom out inside the socket instead of passing through the board):
-    #   - breakout_1x20 now points straight at the stock KiCad
-    #     "PinSocket_1x20_P2.54mm_Vertical_SMD_Pin1Left" footprint -- no
-    #     custom geometry at all, zero land-pattern risk. Both J1B and J2B
-    #     use this single footprint; place.py already places them 180 deg
-    #     apart (rot90/rot270) to put each row's pin "1" at the correct
-    #     physical end with its pads outboard of the Pico -- a second
-    #     "_Pin1Right"-based fp_class was considered and rejected: the
-    #     stock footprint's own pad pattern is a symmetric left/right
-    #     zigzag (courtyard is symmetric about the row centerline either
-    #     way), so a rigid rotation of ONE footprint reproduces the correct
-    #     envelope for both rows; no mirrored variant is needed.
-    #   - pico_socket points at a regenerated PicoSocket_2x20_SMD (renamed
-    #     from ..._ThruHole): same pad numbering, but the NPTH holes are
-    #     gone and the per-pad size/shape/layers/offset are now the real
-    #     stock breakout footprint's own numbers (parsed verbatim), not an
-    #     invented hole-clearance formula.
-    "pico_socket": ("pico2_trace", "PicoSocket_2x20_SMD"),
-    "breakout_1x20": ("Connector_PinSocket_2.54mm", "PinSocket_1x20_P2.54mm_Vertical_SMD_Pin1Left"),
+    # Task 14g (this revert):
+    #   - pico_socket -> stock "RaspberryPi_Pico_Common_THT" (40 THT pads
+    #     numbered "1".."40", on-grid at the nominal pin positions -- no
+    #     custom footprint/generator needed any more; hw/gen_sockets.py and
+    #     pico2_trace.pretty/PicoSocket_2x20_SMD.kicad_mod are deleted).
+    #   - breakout_1x20 -> stock "PinSocket_1x20_P2.54mm_Vertical" (THT).
+    #     NOTE: this footprint anchors at pin 1, unlike the SMD
+    #     "_SMD_Pin1Left" variant it replaces, which anchored at the row's
+    #     geometric centre -- hw/place.py's J1B/J2B coordinates were
+    #     re-derived from probed pad positions accordingly (see the Task
+    #     14e report for the 22-26mm misalignment bug that exact anchor
+    #     mismatch caused once before).
+    #   - hdr_1x02/hdr_1x03/hdr_1x06 -> stock "PinHeader_1x0N_P2.54mm_
+    #     Vertical" (THT; hdr_1x06 still has no PARTS consumer, kept for
+    #     forward consistency).
+    "pico_socket": ("Module", "RaspberryPi_Pico_Common_THT"),
+    "breakout_1x20": ("Connector_PinSocket_2.54mm", "PinSocket_1x20_P2.54mm_Vertical"),
     "mipi20": ("pico2_trace", "FTSH-110-01-DV"),
     "cortex10": ("pico2_trace", "FTSH-105-01-DV"),
     "jst_sh3": ("Connector_JST", "JST_SH_SM03B-SRSS-TB_1x03-1MP_P1.00mm_Horizontal"),
     "jst_sh4": ("Connector_JST", "JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal"),
     "usb_a": ("Connector_USB", "USB_A_Receptacle_GCT_USB1046"),
     "usb_microb": ("Connector_USB", "USB_Micro-B_Molex_47346-0001"),
-    "hdr_1x03": ("Connector_PinHeader_2.54mm", "PinHeader_1x03_P2.54mm_Vertical_SMD_Pin1Left"),
-    "hdr_1x02": ("Connector_PinHeader_2.54mm", "PinHeader_1x02_P2.54mm_Vertical_SMD_Pin1Left"),
-    "hdr_1x06": ("Connector_PinHeader_2.54mm", "PinHeader_1x06_P2.54mm_Vertical_SMD_Pin1Left"),
+    "hdr_1x03": ("Connector_PinHeader_2.54mm", "PinHeader_1x03_P2.54mm_Vertical"),
+    "hdr_1x02": ("Connector_PinHeader_2.54mm", "PinHeader_1x02_P2.54mm_Vertical"),
+    "hdr_1x06": ("Connector_PinHeader_2.54mm", "PinHeader_1x06_P2.54mm_Vertical"),
     "loadswitch": ("Package_TO_SOT_SMD", "SOT-23-5"),
     "esd6": ("Package_TO_SOT_SMD", "SOT-23-6"),
     "isense": ("Package_TO_SOT_SMD", "SOT-23-5"),
