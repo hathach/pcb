@@ -59,26 +59,33 @@ Debug connectors J3/J4/J6/J7 grouped on one board edge so the shared SWD fan-out
 
 ### 5.1 MIPI-20 (J3), per the SEGGER J-Trace pinout (image-authoritative; verified against SEGGER STM32H7 ref board)
 
-| Pin | Net           | Source                                  |     | Pin | Net        | Source                   |
-| --- | ------------- | --------------------------------------- | --- | --- | ---------- | ------------------------ |
-| 1   | VTref         | Pico 3V3_OUT (pin 36)                   |     | 2   | SWDIO      | JST-SH DEBUG (J4)        |
-| 3   | GND           |                                         |     | 4   | SWCLK      | JST-SH DEBUG (J4)        |
-| 5   | GND           |                                         |     | 6   | SWO        | **NC** (RP2350 has none) |
-| 7   | KEY           | NC                                      |     | 8   | TDI        | **NC**                   |
-| 9   | GND           | (GNDDetect → GND, per SEGGER ref board) |     | 10  | nRESET     | RUN (pin 30)             |
-| 11  | **5V-Supply** | J-Trace 5 V → JP1                       |     | 12  | TRACECLK   | GP1 (pin 2) via Rterm    |
-| 13  | **5V-Supply** | J-Trace 5 V → JP1                       |     | 14  | TRACEDATA0 | GP2 (pin 4) via Rterm    |
-| 15  | GND           |                                         |     | 16  | TRACEDATA1 | GP3 (pin 5) via Rterm    |
-| 17  | GND           |                                         |     | 18  | TRACEDATA2 | GP4 (pin 6) via Rterm    |
-| 19  | GND           |                                         |     | 20  | TRACEDATA3 | GP5 (pin 7) via Rterm    |
+| Pin | Net           | Source                                  |     | Pin | Net        | Source                                    |
+| --- | ------------- | --------------------------------------- | --- | --- | ---------- | ----------------------------------------- |
+| 1   | VTref         | Pico 3V3_OUT (pin 36)                   |     | 2   | SWDIO      | JST-SH DEBUG (as-built: J7/J10, see §5.3) |
+| 3   | GND           |                                         |     | 4   | SWCLK      | JST-SH DEBUG (as-built: J7/J10, see §5.3) |
+| 5   | GND           |                                         |     | 6   | SWO        | **NC** (RP2350 has none)                  |
+| 7   | KEY           | NC                                      |     | 8   | TDI        | **NC**                                    |
+| 9   | GND           | (GNDDetect → GND, per SEGGER ref board) |     | 10  | nRESET     | RUN (pin 30)                              |
+| 11  | **5V-Supply** | J-Trace 5 V → JP1                       |     | 12  | TRACECLK   | GP1 (pin 2) via Rterm                     |
+| 13  | **5V-Supply** | J-Trace 5 V → JP1                       |     | 14  | TRACEDATA0 | GP2 (pin 4) via Rterm                     |
+| 15  | GND           |                                         |     | 16  | TRACEDATA1 | GP3 (pin 5) via Rterm                     |
+| 17  | GND           |                                         |     | 18  | TRACEDATA2 | GP4 (pin 6) via Rterm                     |
+| 19  | GND           |                                         |     | 20  | TRACEDATA3 | GP5 (pin 7) via Rterm                     |
 
 ### 5.2 Cortex Debug 2×5 (J6) — plain J-Link
 
 Signals identical to MIPI-20 pins 1–10, wired in parallel on the shared SWD net: 1 VTref, 2 SWDIO, 3 GND, 4 SWCLK, 5 GND, 6 SWO(NC), 7 KEY, 8 TDI(NC), 9 GND, 10 nRESET. No 5 V pin.
 
-### 5.3 SWD source (J4 / J7)
+### 5.3 SWD source (as-built: J7 / J10 — see "As-built deltas")
 
-Both JST-SH 3-pin, pinout **SWCLK / GND / SWDIO** (Raspberry Pi debug standard). J4 cables to the Pico 2's DEBUG port; J7 accepts a Pi Debug Probe. Both land on the shared SWDIO/SWCLK/GND net that feeds J3 pin 2/4 and J6 pin 2/4. **One probe connected at a time.**
+As-built, the connector originally planned as J4 (a second JST-SH jack) was
+never populated; its role is filled by **J7** (JST-SH 3-pin, pinout
+**SWCLK / GND / SWDIO**, accepts a Raspberry Pi Debug Probe cable) and
+**J10** (3-pin THT dupont header, same pin order). Both are cabled to the
+Pico 2's own onboard JST-SH DEBUG port — J7 via a JST-SH-to-JST-SH cable,
+J10 via a JST-SH-to-dupont cable (both ship with the Debug Probe) — and
+both land on the shared SWDIO/SWCLK/GND net that feeds J3 pin 2/4 and J6
+pin 2/4. **One probe connected at a time.**
 
 ### 5.4 Trace signal integrity
 
@@ -195,3 +202,54 @@ Footprint sources: KiCad stock (MIPI-20 = `PinHeader_2x10_P1.27mm_Vertical_SMD` 
 - INA219-over-I2C as an alternative to the analog current-sense (DNP footprint).
 - J9 bus-power diode (DNP).
 - 22 Ω PIO-host series resistors may be populated 0 Ω if signalling is clean.
+
+## As-built deltas (added post-implementation, do not edit the sections above)
+
+This spec's intent is preserved above as originally approved. The board
+is now implementation-complete and frozen at commit `6d67559` in the
+`kicad-build` branch; the divergences below are where the built board
+departs from what this document specifies. Treat `docs/BRINGUP.md` as
+the as-built source of truth for behavior, and `docs/BOM.csv`/
+`fab/MANIFEST.txt` for what's actually orderable.
+
+- **§3 Form factor**: board is **92 × 64 mm**, not the "approx. 60 × 30 mm
+  (may grow)" placeholder. Bottom is **not** a solid GND pour — see
+  `docs/BRINGUP.md` "Board summary" for the measured F.Cu/B.Cu split
+  (F.Cu is the near-plane layer; B.Cu carries ~49% of signal routing and
+  is fragmented into pour islands).
+- **§3/§4 Socket carrier**: the inner Pico sockets are **not** separate
+  `J1`/`J2` refs — that pair of land patterns is a single footprint
+  under the ref **`PICO`** (stock `Module:RaspberryPi_Pico_Common_THT`).
+  `J1`/`J2` never existed as populated parts.
+- **§4 Connectors**: `J4` (the second JST-SH SWD cable-in jack) was
+  **removed**; its role is filled by **`J10`**, a 3-pin THT dupont
+  header (SWCLK/GND/SWDIO), added instead — see §5.3 above, corrected
+  in place.
+- **§4 `J5`**: built as an **SMD** GCT USB1046 (signal pads) + 2 THT
+  mechanical mounting posts, not the THT right-angle part originally
+  specified.
+- **§4 `J3`/`J6`**: use locally-converted footprints
+  (`pico2_trace:FTSH-110-01-DV` / `FTSH-105-01-DV`) drawn from the
+  Samtec FTSH mechanical drawings for pad geometry, but `docs/BOM.csv`
+  sourcing prefers a **generic 1.27 mm-pitch SMD shrouded-header clone**
+  (LCSC-stocked) over the premium Samtec part, which is kept only as
+  the documented alternate — see `docs/PARTS.md` §5.
+- **§5.1/§5.3 SWD source**: fixed in place above (was "J4", now
+  "J7/J10").
+- **§7 Power architecture**: `JP1 = JTRACE` no longer just powers the
+  host port — it now feeds the **Pico itself** through the added
+  `D_VSYS` Schottky diode-OR into `VSYS`, instead of the originally
+  specified hard tie between J-Trace's 5 V pins and pin 40/`VBUS_NET`.
+  See `docs/BRINGUP.md` "Power rules" for the full as-built behavior
+  (this is a safer arrangement than the hard tie this section
+  describes, not a regression).
+- **§14 DNP test header**: the optional DNP 1×6 100-mil trace test
+  header was **removed outright** (not just left DNP) on signal-
+  integrity grounds — it would have sat as a stub on the length-matched
+  trace bundle, which §5.4 itself forbids ("no other loading"). The
+  outer breakout females still serve the same probing purpose.
+- **Four parts added in `6d67559`**, none in this spec: `D_VSYS`
+  (the VSYS feed above), `C_P3V3_1`/`C_P3V3_2` (P3V3 decoupling),
+  `C_HSW_IN` (load-switch input bypass). See `docs/BRINGUP.md`
+  "As-built additions" for placement and the two GND-pour-island fixes
+  they required.

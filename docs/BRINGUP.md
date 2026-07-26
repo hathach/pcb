@@ -1,55 +1,34 @@
 # Pico 2 Trace Motherboard — Bring-Up Note
 
-## Toolchain
-
-**Verified 2026-07-24, KiCad 9.0.2.**
-
-- `kicad-cli version` → `9.0.2`; `python3 -c "import pcbnew; print(pcbnew.Version())"` → `9.0.2` (system Python, no venv needed for `pcbnew`).
-- Board scaffold: `pcbnew.BOARD()` scripted in-memory, placeholder 65×34 mm `Edge.Cuts` rectangle added, `SetCopperLayerCount(2)`, saved with `pcbnew.SaveBoard("pico2_trace.kicad_pcb", b)` — this also wrote a complete `pico2_trace.kicad_pro` / `.kicad_prl` (per `PLAN.md`, never hand-write the `.kicad_pro`).
-- Baseline DRC gate (parsed JSON, per `PLAN.md` "Verified environment facts" — never trust exit code or stdout text):
-  ```
-  kicad-cli pcb drc --format json -o /tmp/drc.json pico2_trace.kicad_pcb
-  python3 -c "import json;v=json.load(open('/tmp/drc.json'))['violations'];print('violations:',[x['type'] for x in v])"
-  ```
-  Result: `violations: []` (exit 0). Confirms the placeholder outline is required — DRC on an outline-less board would report `invalid_outline` and exit 5.
-
-### SKiDL spike (Step 3/4 of Task 1)
-
-Goal: determine whether SKiDL's `KICAD9` schematic target can be used to auto-generate the project schematic from `hw/netlist.py` later in the plan, or whether the schematic must be hand-drawn in eeschema.
-
-- `python3 -m venv .venv && . .venv/bin/activate`
-- `pip install -q skidl kinet2pcb kinparse` → succeeded (no `PIP_FAILED`). Installed `skidl==2.2.3` (`kinet2pcb`, `kinparse` also installed).
-- Ran the generation spike inside the venv with `KICAD9_SYMBOL_DIR=/usr/share/kicad/symbols` exported:
-  ```python
-  import skidl
-  from skidl import Part, Net, set_default_tool, KICAD9, generate_schematic
-  set_default_tool(KICAD9)
-  r1 = Part("Device", "R", value="8.2k", footprint="Resistor_SMD:R_0402_1005Metric")
-  n = Net("N1"); n += r1[1]
-  generate_schematic()
-  ```
-  Output: `SKIDL_GEN_OK ['skidl.kicad_sch']` — SKiDL wrote `./skidl.kicad_sch` (fixed filename `skidl.kicad_sch`, not project-name-based — a known SKiDL quirk, see below). SKiDL's own internal ERC pass on the generated file reported 1 error (`pin_not_connected` — expected, pin 2 of R1 was deliberately left dangling in the spike) and 2 warnings (`global_label_dangling`, `lib_symbol_mismatch` — a benign local-vs-library symbol note).
-- Smoke-tested the generated file with the real KiCad 9 tool (outside the venv, system `kicad-cli`):
-  ```
-  kicad-cli sch erc skidl.kicad_sch; echo exit=$?
-  ```
-  Output: `Found 3 violations` / `exit=0` — matches SKiDL's own ERC count exactly (1 error + 2 warnings), and **`kicad-cli` parsed the file without a crash**. This is the pass/fail signal from the Task 1 brief: exit 0/5 and no parse crash → `auto`.
-
-**Decision: `SCHEMATIC_MODE=auto`.** SKiDL 2.2.3 + `KICAD9` target produces a `.kicad_sch` that KiCad 9.0.2's own `kicad-cli sch erc` reads and checks cleanly. Later tasks may drive schematic generation from `hw/netlist.py` via SKiDL instead of hand-drawing in eeschema, falling back to manual drawing only for parts SKiDL can't express (see caveats below).
-
-**Known SKiDL caveats to carry forward:**
-- Output is a **flat** schematic (no hierarchical sheets) with **crude auto-placement** — fine for ERC/netlist purposes, not for a human-reviewable layout as-is.
-- Output filename is fixed to `./skidl.kicad_sch` (actually `./<script-derived-name>.kicad_sch`, not the project name) — must be renamed/moved into place by the caller.
-- Custom (non-stock) symbols must already exist in a resolvable library before generation; SKiDL does not create new symbols.
-
-The spike's scratch outputs (`skidl.kicad_sch`, `skidl-erc.rpt`, `skidl.erc`, `skidl.log`, `skidl_REPL.*`) and the `.venv/` used to run it are not committed — see `.gitignore`.
-
 ## Board summary
 
-92.1 × 64.1 mm, 2-layer FR4, 1.6 mm. Top = components + all signal routing;
-bottom = solid GND pour under the trace group. Design-complete, DRC-clean
-(0 unconnected; see "First-power checklist" below for the 2 accepted
-pre-existing silk violations).
+92.0 × 64.0 mm (`Edge.Cuts` centreline; the 92.1 × 64.1 mm figure quoted
+in earlier drafts is the bounding box, 0.1 mm bigger on each axis because
+the outline is drawn with a 0.1 mm-wide stroke that extends 0.05 mm past
+the centreline on every side), 2-layer FR4, 1.6 mm. Design-complete,
+DRC-clean (0 unconnected; see "First-power checklist" below for the 2
+accepted pre-existing silk violations).
+
+**"Top = all signal routing, bottom = solid GND pour" is not what got
+built — corrected here.** Measured directly off the board (`pcbnew`,
+per-net/per-layer track length):
+
+- **F.Cu is the one that's nearly a solid plane**: 3657.30 mm² of GND
+  pour, 3430.96 mm² of it (94%) in one single island. Component
+  placement and the five trace signals (`TRACECLK`/`TD0`–`TD3`) also
+  live here.
+- **B.Cu carries roughly half of all signal routing** — 1090.63 mm of
+  the board's 2229.53 mm total track length (48.9%), including several
+  of the "important" nets: `P3V3` 223.53 mm, `VBUS_NET` 131.19 mm,
+  `NRESET` 99.81 mm, `VBUS_SEL` 80.25 mm, `I2C0_SDA`+`I2C0_SCL` 148.02 mm
+  combined, `SWDIO` 67.39 mm. B.Cu's GND pour is correspondingly
+  fragmented — 3730.16 mm² split across 18 islands, the largest only
+  2328.38 mm² (62%) — a patchwork, not a plane.
+- **What does hold**: the five trace nets are **100% F.Cu, with the
+  nearest non-trace B.Cu track 1.27 mm away** (an `NRESET` segment) —
+  zero B.Cu tracks pass within 1 mm of the bundle. The trace group's
+  return-path reference is intact even though the "solid bottom plane"
+  framing for the rest of the board was wrong.
 
 | Ref          | Purpose                                                                |
 | ------------ | ---------------------------------------------------------------------- |
@@ -68,37 +47,90 @@ pre-existing silk violations).
 | `SW1`        | RUN reset button                                                       |
 | `SW_USER`    | User button (GP14 → GND)                                               |
 | `TP1`–`TP3`  | Probe points on the PIO-USB host D+/D−/GND                             |
+| `MH1`–`MH4`  | M3 mounting holes                                                      |
 
 ## Jumper settings
 
-| Jumper | Silk                         | Fitted position  | Meaning                                                                                                        |
-| ------ | ---------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------- |
-| `JP1`  | `5V SEL` / `JTRACE` / `VBUS` | `1-2` = `JTRACE` | J-Trace's MIPI-20 5 V pins power the board's VBUS_SEL rail                                                     |
-|        |                              | `2-3` = `VBUS`   | The board's own VBUS net (module micro-USB / J8 / ext-5 V) powers VBUS_SEL — **this is the 5 V source select** |
-| `JP2`  | `GUARD GP0`                  | fitted (default) | GP0 tied to GND (grounded guard next to TRACECLK)                                                              |
-|        |                              | removed          | GP0 freed for other use                                                                                        |
-| `JP3`  | `GUARD GP6`                  | fitted (default) | GP6 tied to GND (grounded guard next to the trace block)                                                       |
-|        |                              | removed          | GP6 freed for other use                                                                                        |
-| `JP4`  | `VBUS DET`                   | fitted (default) | Enables the native VBUS-detect tap (VBUS_NET → divider → GP16)                                                 |
-|        |                              | removed          | GP16 freed, tap disconnected                                                                                   |
+| Jumper | Silk                         | Fitted position  | Meaning                                                                                                                                                                                                   |
+| ------ | ---------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `JP1`  | `5V SEL` / `JTRACE` / `VBUS` | `1-2` = `JTRACE` | J-Trace's MIPI-20 5 V pins power `VBUS_SEL` — **and, via `D_VSYS`, the Pico itself** (`VBUS_SEL`→`D_VSYS`→`VSYS`); pin 40/`VBUS_NET` stays free, so the module's own micro-USB can act as an **OTG host** |
+|        |                              | `2-3` = `VBUS`   | The board's own `VBUS_NET` (module micro-USB / J8 / ext-5 V) powers `VBUS_SEL` and the Pico (via pin 40, as before) — **this is the 5 V source select**                                                   |
+| `JP2`  | `GUARD GP0`                  | fitted (default) | GP0 tied to GND (grounded guard next to TRACECLK)                                                                                                                                                         |
+|        |                              | removed          | GP0 freed for other use                                                                                                                                                                                   |
+| `JP3`  | `GUARD GP6`                  | fitted (default) | GP6 tied to GND (grounded guard next to the trace block)                                                                                                                                                  |
+|        |                              | removed          | GP6 freed for other use                                                                                                                                                                                   |
+| `JP4`  | `VBUS DET`                   | fitted (default) | Enables the native VBUS-detect tap (VBUS_NET → divider → GP16)                                                                                                                                            |
+|        |                              | removed          | GP16 freed, tap disconnected                                                                                                                                                                              |
 
 ## Power rules
 
-- **Exactly one hard 5 V source on the VBUS net at a time.** VBUS_NET is a
-  single hard-tied node (Pico pin 40 = module micro-USB VBUS = J8 = external-
-  5 V injection) — it cannot be diode-isolated or switch-broken, so doubling
-  up sources (e.g. the module's own micro-USB plugged into a PC *and* J8
-  powered) is a real short between two supplies.
-- `JP1` keeps the J-Trace 5 V supply electrically separate from the USB
-  side: with `JP1 = JTRACE`, the J-Trace's MIPI-20 5 V pins feed VBUS_SEL
-  (and, through the host load switch, `J5`), while VBUS_NET stays free —
-  which **frees the Pico's own micro-USB to act as an OTG host** (its VBUS
-  is then sourced from Pico pin 40 instead of being an input).
-- With `JP1 = VBUS`, the board runs from the module micro-USB (device), J8,
-  or an external-VBUS injection — J-Trace's 5 V pins are disconnected from
-  VBUS_SEL.
-- J-Trace's 5 V rail is current-limited (a few hundred mA) — for anything
-  power-hungry downstream, use J8 or a strong USB supply instead.
+- **Exactly one hard 5 V source on `VBUS_NET` at a time.** `VBUS_NET` is
+  a single hard-tied node (Pico pin 40 = module micro-USB VBUS = J8 =
+  external-5 V injection) — it cannot be diode-isolated or
+  switch-broken, so doubling up sources on it (e.g. the module's own
+  micro-USB plugged into a PC *and* J8 powered) is a real short between
+  two supplies. This is unchanged by the additions below.
+- **`D_VSYS` (added, always populated)** diode-ORs the JP1-selected rail
+  (`VBUS_SEL`) into the Pico's `VSYS` pin, in parallel with the Pico
+  module's own internal VBUS→VSYS Schottky. The two diodes form a
+  genuine diode-OR into `VSYS`: whichever supply (module micro-USB via
+  pin 40, or the JP1-selected rail via `D_VSYS`) is actually present
+  wins, and neither can back-feed the other — **no jumper position or
+  cable combination can make two supplies fight**, which is a safer
+  arrangement than the original `DESIGN.md` §7 spec (a hard tie between
+  J-Trace 5 V and `VBUS_NET`). The ~0.3 V Schottky forward drop on
+  `VSYS` is harmless — the Pico's `VSYS` input accepts 1.8–5.5 V.
+- **`JP1 = JTRACE`**: J-Trace's MIPI-20 5 V pins feed `VBUS_SEL` (and,
+  through the host load switch, `J5`) **and now power the Pico via
+  `D_VSYS`→`VSYS`**, while `VBUS_NET`/pin 40 stays free — which **frees
+  the Pico's own micro-USB to act as an OTG host** (its VBUS is then
+  sourced from pin 40 instead of being an input).
+- **`JP1 = VBUS`**: the board runs from the module micro-USB (device),
+  J8, or an external-VBUS injection; `VBUS_SEL` and `VBUS_NET` are the
+  same node in this position (shorted by the jumper), so `D_VSYS` and
+  the Pico's own internal diode simply conduct in parallel from the same
+  source — harmless. J-Trace's 5 V pins are disconnected from
+  `VBUS_SEL`.
+- J-Trace's 5 V rail is current-limited (a few hundred mA) — for
+  anything power-hungry downstream, use J8 or a strong USB supply
+  instead.
+- `LED_PWR` (the power LED) sits on `VBUS_SEL`, so it indicates
+  whichever rail JP1 has selected — **this reading is now correct** for
+  both jumper positions, since JP1=JTRACE actually powers the whole
+  board (Pico included) rather than just the host port.
+
+## As-built additions (commit `6d67559`)
+
+Four parts added, none of them change any existing net's *function*,
+only add feed/bypass paths:
+
+- **`D_VSYS`** (B5819W Schottky, SOD-123): pad 1 (cathode) = `VSYS`,
+  pad 2 (anode) = `VBUS_SEL`. See "Power rules" above.
+- **`C_P3V3_1`**, **`C_P3V3_2`** (100 nF/16 V, 0402): `P3V3` → `GND`
+  decoupling — one near Pico pin 36 (the 3V3 output), one at
+  `J_STEMMA`'s 3V3 tap.
+- **`C_HSW_IN`** (100 nF/16 V, 0402): `HOST_5V_IN` → `GND`, at `U_HSW`
+  pin 5 (IN) — TI's recommended input bypass for the TPS2051B load
+  switch.
+- **`J5` pad 5** (the USB-A receptacle's 2 mechanical mounting-post
+  pads) is now tied to `GND` (previously unconnected) — proper shield
+  grounding for the host port.
+
+Adding the 4 new footprints reshaped the ground pour enough to strand
+**two GND-pour islands** from the main plane (caught by DRC
+`unconnected_items`, not by visual inspection — see the comments around
+`_STITCH_VIAS_FRAGMENT_FIX`/`_STITCH_VIAS_PAD_ESCAPE` in `hw/pour.py`
+for the full graph-connectivity diagnosis). Healed with:
+- a stitching via at `(45.39, 32.0)` — grounds copper directly under the
+  seated Pico module, near PICO pin 23;
+- a 3-segment F.Cu bridge stub with transition vias at `(52.0, 15.0)`
+  and `(49.205, 16.9)` — near `J_STEMMA`/`J_UART`/`R_NVD`/`C_P3V3_2`.
+
+Both mechanisms live in `hw/pour.py` (`_STITCH_VIAS_FRAGMENT_FIX`,
+`_GND_STUBS`, `_STITCH_VIAS_PAD_ESCAPE`). Verified with a union-find
+over all GND copper (vias, same-layer tracks, and pads, since THT/plated
+pads bridge F.Cu↔B.Cu just like vias do): **connected components = 1**
+(38 F.Cu+B.Cu islands, 7387.46 mm² combined).
 
 ## The 5 SWD entry points
 
@@ -208,11 +240,12 @@ Confirm before ordering:
       THT** — many cheap 1.27 mm shrouded headers are THT and will not fit.
 - [ ] `J3`/`J6` shroud body size checked against the FTSH-110/FTSH-105
       drawing the footprint is dimensioned from — a larger clone body can
-      foul neighbouring connectors on the debug edge.
+      foul neighbouring connectors on the debug edge (measured margin:
+      `J6`↔`J10` courtyard gap is 0.700 mm, `J10`↔`J7` is 0.670 mm).
 - [ ] `J3`/`J6` shroud is **keyed** so the J-Trace ribbon cannot be
       inserted backwards.
-- [x] Board ≤100 mm on its longest edge (92.1 mm) — qualifies for JLC's
-      cheap prototype tier.
+- [x] Board ≤100 mm on its longest edge (92.1 mm bbox / 92.0 mm
+      centreline) — qualifies for JLC's cheap prototype tier.
 - [x] 2-layer.
 
 ## Firmware / BSP interface
@@ -240,3 +273,9 @@ for the full rationale):
 Keep GP0/GP6 as inputs whenever their guard jumper is fitted (driving them
 against a grounded guard is a short). GP1–GP5 carry nothing else — no
 pulls, LEDs, or other loading beyond the trace path.
+
+`GP15` (`HOST_VBUS_FLT`) is the load switch's open-drain fault output
+with **no external pull-up on the board** — the net ties only `PICO.20`
+and `U_HSW.FLG`, nothing else. Firmware must enable the RP2350's
+**internal** pull-up on this pin to read it; left as a bare input it will
+float.

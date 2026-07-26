@@ -1,0 +1,87 @@
+Pico 2 SWD+ETM Trace Motherboard — fabrication output manifest
+================================================================
+
+Source board revision : 6d67559 (6d6755925cff3d3999a5ba2291550563aaa05c66)
+                         "pcb: fix diode direction, ground J5 shell, add
+                         VSYS feed + decoupling, widen V5_JTRACE"
+Board file             : pico2_trace.kicad_pcb (unmodified by this pass —
+                          see task-19-report.md gate: `git diff` empty)
+Generated with          : KiCad 9.0.2 (kicad-cli)
+Generation date (UTC)  : 2026-07-26T04:45:38Z
+
+Commands used
+-------------
+kicad-cli pcb export gerbers -o fab/ pico2_trace.kicad_pcb
+kicad-cli pcb export drill   -o fab/ pico2_trace.kicad_pcb
+kicad-cli pcb export pos -o fab/pos.csv --format csv --units mm --side both pico2_trace.kicad_pcb
+
+Determinism check: gerbers/drill/pos were generated twice into scratch
+dirs and diffed — every file was byte-identical except the
+CreationDate/timestamp header line(s) (Gerber `%TF.CreationDate%`/`G04
+Created by KiCad` comment, drill file header, .gbrjob "CreationDate"
+field). No geometry, aperture, or coordinate differences. pos.csv was
+byte-identical on both runs (no timestamp field at all).
+
+Full fab/ output (29 files, all layers KiCad's default export produces)
+-------------------------------------------------------------------------
+pico2_trace-B_Adhesive.gba        467
+pico2_trace-B_Courtyard.gbr       441
+pico2_trace-B_Cu.gbl            194671
+pico2_trace-B_Fab.gbr              450
+pico2_trace-B_Mask.gbs            5633
+pico2_trace-B_Paste.gbp            468
+pico2_trace-B_Silkscreen.gbo       469
+pico2_trace.drl                   4567
+pico2_trace-Edge_Cuts.gm1          916
+pico2_trace-F_Adhesive.gta         467
+pico2_trace-F_Courtyard.gbr      14506
+pico2_trace-F_Cu.gtl            275058
+pico2_trace-F_Fab.gbr           321638
+pico2_trace-F_Mask.gts           13019
+pico2_trace-F_Paste.gtp           8327
+pico2_trace-F_Silkscreen.gto    188614
+pico2_trace-job.gbrjob             4226
+pico2_trace-Margin.gbr              441
+pico2_trace-User_1.gbr              441
+pico2_trace-User_2.gbr              441
+pico2_trace-User_3.gbr              441
+pico2_trace-User_4.gbr              441
+pico2_trace-User_Comments.gbr    16318
+pico2_trace-User_Drawings.gbr    13701
+pico2_trace-User_Eco1.gbr           441
+pico2_trace-User_Eco2.gbr           441
+pos.csv                            3812
+pico2_trace.drl is a single MixedPlating file (PTH vias/component holes
++ NPTH mounting holes together, per its own `TF.FileFunction` header) —
+KiCad did not split a separate NPTH file for this board.
+
+Trimmed upload zip: fab/pico2_trace_gerbers.zip
+------------------------------------------------
+Only the layers a fab actually needs — copper, mask, silk (top only),
+top paste, board outline, and the drill file. Deliberately EXCLUDES
+F_Fab/B_Fab, Courtyard, Adhesive, Margin, the 6 User_* layers, the
+.gbrjob job file, and B_Paste (not requested for this pass) — an extra
+.gbr a fab's auto-detect mis-maps is a classic way to get garbage copper
+or silk; the previous zip carried 13 such extra layers including a
+294 KB F_Fab.gbr.
+
+  pico2_trace-F_Cu.gtl          (F.Cu)
+  pico2_trace-B_Cu.gbl          (B.Cu)
+  pico2_trace-F_Mask.gts        (F.Mask)
+  pico2_trace-B_Mask.gbs        (B.Mask)
+  pico2_trace-F_Silkscreen.gto  (F.Silkscreen)
+  pico2_trace-B_Silkscreen.gbo  (B.Silkscreen)
+  pico2_trace-F_Paste.gtp       (F.Paste)
+  pico2_trace-Edge_Cuts.gm1     (Edge.Cuts)
+  pico2_trace.drl               (drill, PTH+NPTH combined)
+
+  9 files, 691274 bytes uncompressed, 161917 bytes zipped.
+
+sha256(pico2_trace_gerbers.zip):
+abad617cb89031559363627dd8ebcbfd0e672fd8f0c536023a95ec4daaeae9d7
+
+DRC at generation time: 0 unconnected_items, 2 silk_edge_clearance
+(pre-existing PICO footprint items, unchanged from prior tasks).
+
+fab/ is gitignored; this MANIFEST.txt is force-added so the ordered
+board revision stays unambiguous without committing binary fab output.
