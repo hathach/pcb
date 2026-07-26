@@ -136,6 +136,10 @@ def _add_gnd_zone(board, layer):
 _SOLID_OVERRIDE_PADS = [
     ("PICO", "13"), ("J1B", "13"), ("PICO", "28"), ("JP2", "2"),
     ("J1B", "3"), ("J1B", "8"),
+    # Task 18: D_VSYS's new VBUS_SEL leg crosses J2B's row through the
+    # pad37/pad38 half-pitch gap, right next to J2B.18 -- DRC-confirmed
+    # `starved_thermal` (down to 1 spoke) under normal thermal relief.
+    ("J2B", "18"),
 ]
 
 
@@ -175,6 +179,31 @@ _GND_STUBS = [
     # outside the corridor bbox (y<40.89), to a legal via spot instead
     # of stitching the corridor interior.
     ("F.Cu", (7.295, 40.89), (7.295, 39.5), 0.2),
+    # Task 18: bridges the B.Cu orphan pair (F.17/B.16, see
+    # _STITCH_VIAS_FRAGMENT_FIX's (52.28,32.0)... (45.39,32.0) comment --
+    # that via unions F.17<->B.16 but neither reaches the main GND network
+    # on its own) to B.15/the main plane. A proper union-find over ALL
+    # GND copper (vias union F<->B; GND tracks union same-layer; THT/
+    # plated PADS union everything they touch, bridging layers too) found
+    # this as the remaining gap -- "every island has a via" is NOT the
+    # same test; an island can have a via and still be isolated if that
+    # via's other-layer landing spot is itself isolated. See
+    # task-18-report.md's "Correct future check" section.
+    #
+    # Direct paths all failed DRC clearance (checked programmatically,
+    # not by eye, against every non-GND track/via/pad on the crossed
+    # layer): BTN_USER's F.Cu track at y=13.8 (x 46.665-66.0) blocks from
+    # the north; J2B.1/NATIVE_VBUS_DET's own pad+F.Cu column at
+    # (50.475,15.6)/x=50.475 blocks a straight crossing; NATIVE_VBUS_DET's
+    # F.Cu vertical (50.475, y 15.6-23.11) blocks a same-Y jog further
+    # south. This 3-segment path threads the one surviving window: south
+    # of BTN_USER's clearance (>=14.2) but north of J2B.1's clearance
+    # (<=14.45) for the westward leg, then straight south through J2B's
+    # own pad1/pad2 half-pitch gap column (x=49.205, clear of
+    # NATIVE_VBUS_DET which is a different X) into B.15's own territory.
+    ("F.Cu", (52.0, 15.0), (52.0, 14.3), 0.2),
+    ("F.Cu", (52.0, 14.3), (49.205, 14.3), 0.2),
+    ("F.Cu", (49.205, 14.3), (49.205, 16.9), 0.2),
 ]
 
 _LAYER_MAP = {"F.Cu": pcbnew.F_Cu, "B.Cu": pcbnew.B_Cu}
@@ -214,6 +243,39 @@ _STITCH_VIAS_FRAGMENT_FIX = [
     (19.995, 19.434), (45.545, 41.878), (44.925, 16.787),
     (63.3, 12.032), (10.332, 59.696), (51.617, 60.296), (79.751, 46.451),
     (73.401, 44.7), (23.805, 19.434), (18.935, 23.408), (26.345, 51.901),
+    # Task 18: genuine orphan island inside the former "Antenna Copper
+    # Keep Out" region (x 43.3-52.3, y 24.9-39.1, neutered in Task 14h) --
+    # a ~1.32mm-wide x ~15.6mm-tall F.Cu GND sliver along PICO's own GND
+    # column (pin18/pin23 share x=45.395) with no via or GND pad anywhere
+    # in it, DRC-caught as `unconnected_items` (reported at the board's
+    # unrelated top-left corner outline vertex -- KiCad anchors that
+    # message at the zone's first outline point, not the fault location;
+    # found instead by cross-referencing every F.Cu GND fill island's
+    # bbox against every GND via/pad position). Probed the island's own
+    # width profile before choosing this point: uniform 1.320mm for
+    # nearly its whole length (y~25.2-39.2), narrowing to 0.980mm only
+    # right at the top (near PICO.23's own clearance arc) -- (45.39,32.0)
+    # sits mid-run at the uniform width, giving the standard 0.6mm via
+    # (needs 1.0mm channel: 0.3 radius + 0.2 clearance each side) 0.16mm
+    # clearance margin on each side. Grounds copper directly beneath the
+    # seated Pico module -- a genuine reference-plane improvement, not
+    # just a DRC fix.
+    (45.39, 32.0),
+    # Task 18, second orphan: per-island "has an anchor" isn't sufficient
+    # -- connectivity is a graph over ALL GND copper (vias union F.Cu<->
+    # B.Cu; GND tracks union same-layer islands; THT/plated PADS union
+    # every island they touch, bridging layers too -- omitting pads
+    # over-fragments the graph). A proper union-find (ring-sampled at
+    # anchor radius + ~0.45mm, since a bare point-in-polygon test at a
+    # pad/via CENTRE false-negatives on the thermal-gap/drill hole there)
+    # found a second real orphan near J_STEMMA/J_UART/R_NVD/C_P3V3_2
+    # (bbox x~48.76-55.70 y~9.03-11.51, ~10.6mm^2) -- exposed by Task 18's
+    # own C_P3V3_2 placement reshaping the pour in that corner. Widest
+    # horizontal run measured ~6.80mm at this point, enormous margin over
+    # the 1.0mm a 0.6mm via needs. Island indices renumber on every
+    # refill (do not hardcode "outline N" -- verify by union-find, not
+    # index).
+    (52.28, 10.43),
 ]
 
 _STITCH_VIAS_SPREAD = [
@@ -257,6 +319,11 @@ _STITCH_VIAS_SPREAD = [
 #     track was moved to the same new endpoint.
 _STITCH_VIAS_PAD_ESCAPE = [
     (61.6, 27.975), (61.3, 28.625), (7.295, 39.5), (14.3, 61.2), (65.50, 34.65),
+    # Task 18: the two transition vias for the B.16<->B.15 bridge stub
+    # above (F.Cu<->B.Cu at each end) -- clearance verified
+    # programmatically against every non-GND track/via/pad on both
+    # layers before placing (task-18-report.md).
+    (52.0, 15.0), (49.205, 16.9),
 ]
 
 _STITCH_VIA_DIA_MM = 0.6

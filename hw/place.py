@@ -232,8 +232,77 @@ POS: dict[str, tuple[float, float, float]] = {
     "ESD_D": (77.5, 44.7, 0),
     "R_J9VD_B": (80.9, 47.3, 270),
     "R_J9VD_T": (82.6, 47.3, 90),
-    "D_J9_BUSPWR": (77.7, 50.5, 180),
+    # Task 18: rotation flipped 180->0 to match the netlist.py pad-direction
+    # fix (pad1=CATHODE/VBUS_NET, pad2=ANODE/J9_VBUS, was backwards). The
+    # SOD-123 footprint's two pads are symmetric rectangles at local
+    # (-1.65,0)/(+1.65,0) about this same center -- a 180 degree rotation
+    # swaps which physical world location each pad NUMBER sits at (was:
+    # pad1 east @79.35/pad2 west @76.05; now: pad1 west/pad2 east), which
+    # combined with the netlist swap lands each NET on the exact same
+    # physical copper as before (west=VBUS_NET, east=J9_VBUS, unchanged) --
+    # zero routing geometry change, see route_trace.py's matching pad-
+    # number swap.
+    "D_J9_BUSPWR": (77.7, 50.5, 0),
     "J9": (88.255, 45.0, 90),
+
+    # --- Task 18: VSYS feed diode + decoupling caps (pre-fab review).
+    # D_VSYS sits in the open PICO/J2B row gap (courtyard-clear band
+    # y=17.395-20.415, verified via pcbnew courtyard survey), close to
+    # PICO pin 39's own X column -- rotation 0 (2.39mm tall) fits the
+    # 3.02mm gap with 0.315mm clear top/bottom. x=4.9 (not pin 39's exact
+    # 4.755): DRC-caught a 0.19mm clearance shortfall (needs 0.2mm)
+    # between pad1 and the adjacent VBUS_NET vertical track at x=2.215;
+    # +0.145mm gives real margin. Its VSYS leg still lands squarely on
+    # J2B.19 (a waypoint, not the part's own X); its VBUS_SEL leg jogs
+    # east (open gap territory) to the J2B pad37/pad38 half-pitch gap
+    # column (x=8.565 -- NOT the nearer pad18/pad19 gap, which has a
+    # pre-existing GND stitching via right in its path) before crossing
+    # J2B's row -- see route_trace.py.
+    "D_VSYS": (4.9, 18.905, 0),
+
+    # C_P3V3_1: NOT in the PICO/J2B row gap near pin 36 -- three problems
+    # ruled that whole corridor out (task-18-report.md has the full
+    # bisection): (a) centred on P3V3's own column (x=12.375, rot=90)
+    # shorted the GND pad against that 0.5mm track; (b) offset to
+    # x=13.575 (rot=0) needed a tap crossing GP28/AREF's own breakout
+    # columns; (c) even after fixing (a)/(b), DRC-caught a *zone*
+    # `unconnected_items` fault -- the F.Cu GND zone's fill splits into
+    # two regions that don't touch, reported at the board's own top-left
+    # rounded-corner outline vertex (0.3,3.0), nowhere near this part.
+    # Bisected: adding a second new GND pad anywhere in this gap corridor
+    # (alongside C_P3V3_2, itself unavoidably new GND-bearing copper)
+    # destabilises the zone-fill solver's global result at that distant,
+    # already-marginal corner (MH1 + the rounded corner + VBUS_NET's own
+    # track there) -- not fixable by relocating within the corridor, only
+    # by leaving it. Placed instead in the open JP4<->J_STEMMA band
+    # (tested clear of the zone fault), tapping P3V3's existing B_Cu run
+    # at x=41.585 (the same one J_STEMMA's own VTref-adjacent supply
+    # uses) -- see route_trace.py.
+    "C_P3V3_1": (28.0, 11.0, 180),
+
+    # C_P3V3_2: south of J_STEMMA, in the open band between J_STEMMA's own
+    # courtyard (bottom 7.225) and J2B's row (top 13.755). Two long
+    # horizontal F_Cu tracks cross this band at this X: NVD_TOP at y=9.51
+    # (x=22.27-52.9) and GP10 at y=12.11 (x=33.965-56.3) -- DRC-caught
+    # shorting/crossing at earlier y=10.2/11.5 attempts. rot=0 (not
+    # 270/90): the pocket between them (y~10.09-11.53) is only 1.44mm
+    # tall, too short for the diode-style 1.91mm rotated-90/270 footprint
+    # height but comfortable for rot=0's 1.01mm height. Centred at
+    # y=10.8. The P3V3 tap still has to physically cross NVD_TOP's own Y
+    # to reach J_STEMMA.2 further north -- done as a B_Cu via-hop in
+    # route_trace.py (same technique as every other same-layer-obstacle
+    # crossing in this file), not by placement alone.
+    "C_P3V3_2": (48.6, 10.8, 0),
+
+    # C_HSW_IN: at U_HSW pin 5 (IN) -- TI recommends 0.1uF at IN; both
+    # existing HVBUS caps are on the OUT side. The original spot
+    # (67.5,39.2) collided with HOST_VBUS_EN's own track (runs right
+    # through x=67.0, y=39.15-39.85, DRC-caught). Relocated south/east of
+    # U_HSW/R_HVEN_PD's courtyards and clear of a GND stitching via at
+    # (70,38) -- verified via a full corridor survey (task-18-report.md).
+    # A short jog (see route_trace.py) reaches the HOST_5V_IN spine's own
+    # end point at (67.300,37.250).
+    "C_HSW_IN": (68.5, 41.0, 0),
 }
 
 # Trace silk (G-4): warning text in the J1B -> debug-row gap, centred in the
@@ -405,6 +474,16 @@ FUNC_LABELS: list[tuple[str, float, float, int]] = [
     ("D+", 61.675, 14.6, 0),        # TP1
     ("D-", 61.675, 25.5, 0),        # TP2
     ("G", 69.3, 25.4, 0),           # TP3
+    # Task 18 pre-fab review: SW1/SW_USER had only a bare refdes, no
+    # function label. Placed in verified-clear open bands (see
+    # task-18-report.md) -- RESET north of SW1, between D_J9_BUSPWR
+    # (bottom 51.695) and C_NRESET (top 54.89); USER north of SW_USER, in
+    # the open strip along the top board edge.
+    ("RESET", 79.06, 53.0, 0),      # SW1
+    # x=74.0 (not SW_USER's own centre, 71.5): the board-name text
+    # ("PICO2 TRACE MB") spans x=56.3-71.7 at this same y-band -- DRC-
+    # caught silk_overlap at 71.5. 74.0 clears it with margin.
+    ("USER", 74.0, 2.2, 0),         # SW_USER
 ]
 
 # JP1 pin-1 marker: small filled dot just outside the header's own left

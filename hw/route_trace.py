@@ -792,7 +792,10 @@ _LOCAL_TIES = [
     # own pad1(J9_VBUS)/pad2(DEV_VBUS_DET) share x=82.6, so a naive path
     # toward ESD_D (west) sweeping through pad2's y needs the same jog-around
     # treatment as R_HDP_PD/R_HDM_PD above, done explicitly there.
-    ("J9_VBUS", "D_J9_BUSPWR", "1", "R_J9VD_T", "1", "hv"),
+    # Task 18: pad "2" (was "1" pre-fix) -- D_J9_BUSPWR's direction fix
+    # rotated the footprint 180 degrees, swapping which pad number sits at
+    # this same physical (east) location; see netlist.py/place.py.
+    ("J9_VBUS", "D_J9_BUSPWR", "2", "R_J9VD_T", "1", "hv"),
 ]
 
 
@@ -2086,7 +2089,11 @@ def _route_final_long_runs(board):
     #      short Default-width bands where this column crosses PICO row2
     #      (y=23.11) and J2B's mirrored row (y=15.6) (Task 14i review fix).
     ni_dvd_net = ni_net
-    d_j9 = _pos(_pad(board, "D_J9_BUSPWR", "2"))
+    # Task 18: pad "1" (was "2" pre-fix) -- see the J9_VBUS entry's comment
+    # above in _LOCAL_TIES; the 180-degree rotation swapped pad numbers,
+    # not physical location, so this is still the same (76.05,50.5) west
+    # pad and every waypoint below is unchanged.
+    d_j9 = _pos(_pad(board, "D_J9_BUSPWR", "1"))
     if not _track_exists(board, ni_dvd_net.GetNetCode(), pcbnew.F_Cu, _mm(*d_j9), _mm(70.0, d_j9[1])):
         _add_track(board, ni_dvd_net, pcbnew.F_Cu, [d_j9, (70.0, d_j9[1])], w_net)
         _add_via(board, ni_dvd_net, (70.0, d_j9[1]), via_dia_net, via_drill_net)
@@ -2137,13 +2144,12 @@ def _route_final_long_runs(board):
 
     # V5_JTRACE: JP1.1 (9.96,10.655) -> J3.11 (already has a short F_Cu
     # stub from its own side, 15.525,61.15 -> 16.795,61.15). J3.11 sits
-    # deep inside the trace-bundle corridor (x 4.035-20.605); the whole
-    # route stays Default width (the corridor gaps are too tight for
-    # Power) and, whenever x is inside the corridor's own x-range, keeps
-    # y either <27.5 (well north of the bundle's y=40.89 start) or
-    # >57.25 (south of the bundle's whole footprint, past J3's own row1)
-    # -- B_Cu is never present in the corridor for 27.5<=y<=57.25 at
-    # x<20.605, matching the hard "B_Cu out of the corridor" rule.
+    # deep inside the trace-bundle corridor (x 4.035-20.605); whenever x is
+    # inside the corridor's own x-range, the route keeps y either <27.5
+    # (well north of the bundle's y=40.89 start) or >57.25 (south of the
+    # bundle's whole footprint, past J3's own row1) -- B_Cu is never
+    # present in the corridor for 27.5<=y<=57.25 at x<20.605, matching the
+    # hard "B_Cu out of the corridor" rule.
     #   1. South at x=11.105 (PICO's own gap between P3V3_EN/P3V3,
     #      9.835/12.375), hopping VBUS_SEL's local tap (12.5,13.0)-
     #      (4.0,13.0) and P3V3's own diagonal (12.375,23.11->3.485,39.79,
@@ -2165,6 +2171,13 @@ def _route_final_long_runs(board):
     #      does the path cross into x<20.605: west at y=61.4 to
     #      x=15.525, then a final via + short F_Cu approach onto J3.11
     #      (SMD, F_Cu only).
+    #
+    # Stays Default width throughout here -- see the dedicated
+    # `_widen_v5_jtrace` pass below (Task 18) for why widening belongs
+    # there, not here: this whole net is *already* on the board (routed
+    # by an earlier task), so the `_track_exists` idempotence guard below
+    # always finds it and skips this block entirely on every real run --
+    # changing `w_default` to something else here would be silently inert.
     w_v5, via_dia_v5, via_drill_v5 = power_via("V5_JTRACE")
     ni_v5 = _net(board, "V5_JTRACE")
     jp1_1 = _pos(_pad(board, "JP1", "1"))
@@ -2272,6 +2285,122 @@ def _route_final_long_runs(board):
         _add_track(board, ni_sel2, pcbnew.B_Cu, [(15.5, 13.0), (12.5, 13.0)], w_default)
 
 
+def _route_d_vsys(board):
+    """Task 18: D_VSYS (VBUS_SEL -> VSYS Schottky diode-OR, restoring the
+    DESIGN SS7 "JP1=JTRACE powers the Pico" capability). Placed in the
+    open PICO-row2/J2B-row gap (y=17.395-20.415) at PICO pin 39's own X
+    column (4.755) -- see place.py's POS comment for the courtyard-survey
+    derivation.
+
+    VSYS leg (pad1): a plain hv bend onto J2B.19 (VSYS's only other
+    member, already tied to PICO.39) -- lands squarely on J2B.19's own
+    column (x=4.755), so it never sweeps past a neighboring J2B pad.
+
+    VBUS_SEL leg (pad2): jogs east from pad2's own column (6.405), while
+    still south of J2B's row (open gap territory), to the J2B pad37/pad38
+    (P3V3_EN/GND) half-pitch gap column (x=8.565, the (7.295+9.835)/2
+    midpoint) -- NOT the nearer pad18/pad19 gap (x=6.025, the (7.295+
+    4.755)/2 midpoint): a pre-existing GND stitching via sits at exactly
+    (6.0,14.0) (pour.py's grid), directly in that column's path down to
+    y=13.0, and any track through there -- at any width -- overlaps it.
+    x=8.565 is clear (verified via a full corridor survey: nothing else
+    routes through it). Crosses J2B's row necked to Default width (same
+    +-0.6mm margin this file uses for every other J2B-row crossing), then
+    continues at Power width down to y=13.0 -- a same-net, same-layer
+    T-junction onto the existing VBUS_SEL run (12.5,13.0)-(4.0,13.0).
+    """
+    ni_vsys = _net(board, "VSYS")
+    w_vsys = _class_width(board, "VSYS")
+    ni_sel = _net(board, "VBUS_SEL")
+    w_sel = _class_width(board, "VBUS_SEL")
+    w_default = pcbnew.ToMM(
+        board.GetDesignSettings().m_NetSettings.GetDefaultNetclass().GetTrackWidth()
+    )
+    ncls_sel = board.GetDesignSettings().m_NetSettings.GetEffectiveNetClass("VBUS_SEL")
+    via_dia_sel = pcbnew.ToMM(ncls_sel.GetViaDiameter())
+    via_drill_sel = pcbnew.ToMM(ncls_sel.GetViaDrill())
+
+    pad1 = _pos(_pad(board, "D_VSYS", "1"))
+    pad2 = _pos(_pad(board, "D_VSYS", "2"))
+    j2b19 = _pos(_pad(board, "J2B", "19"))
+    _add_path_once(board, ni_vsys, pcbnew.F_Cu, _bend_hv(pad1, j2b19), w_vsys)
+
+    gap_x = 8.565  # (J2B.18 x=7.295 + J2B.17 x=9.835) / 2, half-pitch gap
+    j2b_neck_lo, j2b_neck_hi = 15.6 - 0.6, 15.6 + 0.6
+    if not _track_exists(board, ni_sel.GetNetCode(), pcbnew.F_Cu, _mm(*pad2), _mm(gap_x, pad2[1])):
+        _add_track(board, ni_sel, pcbnew.F_Cu, [pad2, (gap_x, pad2[1])], w_sel)
+        _add_track(board, ni_sel, pcbnew.F_Cu, [(gap_x, pad2[1]), (gap_x, j2b_neck_hi)], w_sel)
+        _add_track(board, ni_sel, pcbnew.F_Cu, [(gap_x, j2b_neck_hi), (gap_x, j2b_neck_lo)], w_default)
+        _add_track(board, ni_sel, pcbnew.F_Cu, [(gap_x, j2b_neck_lo), (gap_x, 13.0)], w_sel)
+        _add_via(board, ni_sel, (gap_x, 13.0), via_dia_sel, via_drill_sel)
+
+
+def _route_decoupling(board):
+    """Task 18: 3x 100n/16V 0402 decoupling caps (pre-fab review: no cap
+    anywhere on P3V3, no input bypass on the load switch).
+
+    C_P3V3_1 (near PICO.36/P3V3): offset 1.2mm east of the existing
+    PICO.36<->J2B.16 P3V3 vertical F_Cu track's own column (x=12.375) --
+    NOT centred on it, which shorted the cap's GND pad against that track
+    (DRC-caught, see place.py's comment) -- pad1 jogs a short 0.72mm west
+    onto the track (a T-junction).
+
+    C_P3V3_2 (near J_STEMMA): pad1 runs straight up J_STEMMA.2's own
+    column (x=48.6) onto that pad directly -- no other J_STEMMA pad sits
+    on this column, so the approach never sweeps past a neighbor.
+
+    C_HSW_IN (at U_HSW pin 5/IN): pad1 jogs north then west (clear of
+    HOST_VBUS_EN's own track, which runs right through the original spot
+    -- see place.py's comment) onto the existing HOST_5V_IN F_Cu spine's
+    own pre-existing junction point at (67.3,37.25) -- a same-layer,
+    same-net 3-way junction.
+
+    All three GND pads are left for the pour (established project
+    convention -- GND is never individually traced, see
+    task-15-report.md).
+    """
+    ni_p3v3 = _net(board, "P3V3")
+    w_p3v3 = _class_width(board, "P3V3")
+    ncls_p3v3 = board.GetDesignSettings().m_NetSettings.GetEffectiveNetClass("P3V3")
+    via_dia_p3v3 = pcbnew.ToMM(ncls_p3v3.GetViaDiameter())
+    via_drill_p3v3 = pcbnew.ToMM(ncls_p3v3.GetViaDrill())
+    c1_pad1 = _pos(_pad(board, "C_P3V3_1", "1"))
+    # C_P3V3_1 sits in the open JP4<->J_STEMMA band (see place.py's
+    # comment), at y=11.5 -- clear (1.99mm) of JP4's NVD_TOP net, which
+    # runs a long F_Cu track at y=9.51 (x=22.27-52.9) that C_P3V3_2 has to
+    # actively dodge. A straight via + B_Cu run at y=11.5 never comes
+    # near it, landing directly on the existing P3V3 B_Cu run at x=41.585
+    # (same-net, same-layer T-junction).
+    if not _track_exists(board, ni_p3v3.GetNetCode(), pcbnew.B_Cu, _mm(*c1_pad1), _mm(41.585, c1_pad1[1])):
+        _add_via(board, ni_p3v3, c1_pad1, via_dia_p3v3, via_drill_p3v3)
+        _add_track(board, ni_p3v3, pcbnew.B_Cu, [c1_pad1, (41.585, c1_pad1[1])], w_p3v3)
+
+    # C_P3V3_2 -> J_STEMMA.2: JP4's NVD_TOP net runs a long horizontal
+    # F_Cu track at y=9.51 (x=22.27-52.9) directly across this column --
+    # DRC-caught tracks_crossing on a naive straight shot. Hops to B_Cu
+    # for a brief span either side of y=9.51 (+-0.6mm, the same margin
+    # this file uses for every other same-layer obstacle crossing), then
+    # jogs onto J_STEMMA.2's own column before the final approach.
+    c2_pad1 = _pos(_pad(board, "C_P3V3_2", "1"))
+    j_stemma_2 = _pos(_pad(board, "J_STEMMA", "2"))
+    ncls_p3v3 = board.GetDesignSettings().m_NetSettings.GetEffectiveNetClass("P3V3")
+    via_dia_p3v3 = pcbnew.ToMM(ncls_p3v3.GetViaDiameter())
+    via_drill_p3v3 = pcbnew.ToMM(ncls_p3v3.GetViaDrill())
+    hop_lo, hop_hi = 9.51 + 0.6, 9.51 - 0.6
+    if not _track_exists(board, ni_p3v3.GetNetCode(), pcbnew.F_Cu, _mm(*c2_pad1), _mm(c2_pad1[0], hop_lo)):
+        _add_track(board, ni_p3v3, pcbnew.F_Cu, [c2_pad1, (c2_pad1[0], hop_lo)], w_p3v3)
+        _add_via(board, ni_p3v3, (c2_pad1[0], hop_lo), via_dia_p3v3, via_drill_p3v3)
+        _add_track(board, ni_p3v3, pcbnew.B_Cu, [(c2_pad1[0], hop_lo), (c2_pad1[0], hop_hi)], w_p3v3)
+        _add_via(board, ni_p3v3, (c2_pad1[0], hop_hi), via_dia_p3v3, via_drill_p3v3)
+        _add_track(board, ni_p3v3, pcbnew.F_Cu,
+                   [(c2_pad1[0], hop_hi), (j_stemma_2[0], hop_hi), j_stemma_2], w_p3v3)
+
+    ni_5v = _net(board, "HOST_5V_IN")
+    w_5v = _class_width(board, "HOST_5V_IN")
+    chsw_pad1 = _pos(_pad(board, "C_HSW_IN", "1"))
+    _add_path_once(board, ni_5v, pcbnew.F_Cu, _bend_vh(chsw_pad1, (67.3, 37.25)), w_5v)
+
+
 def _widen_vbus_net(board):
     """Task 15a: VBUS_NET was left at Default width (0.2mm) over two legs
     Task 14i's power-trace widening pass (see its docstring above, and
@@ -2346,6 +2475,110 @@ def _widen_vbus_net(board):
         _add_track(board, ni, pcbnew.B_Cu, [(33.965, row1_lo), (33.965, 36.0)], w_net)
 
 
+def _widen_v5_jtrace(board):
+    """Task 18 pre-fab review: V5_JTRACE (JP1.1 -> J3.11, routed by an
+    earlier task in `_route_final_long_runs`) was left at Default width
+    (0.2mm) over its *entire* run despite being Power netclass (0.5mm) --
+    83.3 of its 84.5mm total length. At ~206mOhm that's ~100mV at 500mA,
+    pushing J5's VBUS toward the 4.75V USB floor when JP1 selects J-Trace
+    power (worse now that D_VSYS can also feed the Pico from this net).
+
+    Same technique as `_widen_vbus_net`: every segment already exists on
+    the board (routed by an earlier task, so `_route_final_long_runs`'s
+    own idempotence guard always skips re-adding it -- widening has to
+    happen by *mutating* the existing track objects, not by conditionally
+    adding new ones). Widened to Power width throughout except three
+    genuine tight-pitch bands, kept narrow: the JP1-row local jog (x
+    between JP1 pins 1/2, same reasoning as every other JP1-row local jog
+    in this file) and the two PICO/J1B half-pitch row crossings (row2 at
+    x=11.105, reusing ROW2_NECK_MM; row1+J1B at x=28.885, reusing the same
+    +-0.6mm margin `_widen_vbus_net` already validated for those two rows
+    at a different X -- same uniform pad/pitch geometry, same margin).
+
+    Idempotent: segments are located by their known (start, end)
+    coordinates; a second run finds the already-widened/split geometry
+    (the pre-split full-span track segments no longer exist once split)
+    and no-ops.
+    """
+    ni = _net(board, "V5_JTRACE")
+    nc = ni.GetNetCode()
+    w_v5 = _class_width(board, "V5_JTRACE")
+    w_default = pcbnew.ToMM(
+        board.GetDesignSettings().m_NetSettings.GetDefaultNetclass().GetTrackWidth()
+    )
+    # Matches _route_final_long_runs' own ROW2_NECK_MM/J2B_NECK_MM exactly
+    # (same PICO row2 / J2B row half-pitch crossings, just at this net's
+    # own X).
+    ROW2_NECK_MM = (23.11 - 0.85, 23.11 + 0.85)
+    J2B_NECK_MM = (15.6 - 0.6, 15.6 + 0.6)
+
+    def find(layer, p0, p1):
+        for t in board.GetTracks():
+            if t.GetClass() == "PCB_VIA" or t.GetNetCode() != nc or t.GetLayer() != layer:
+                continue
+            s, e = t.GetStart(), t.GetEnd()
+            if (s == p0 and e == p1) or (s == p1 and e == p0):
+                return t
+        return None
+
+    # Simple full-widen: every segment except the JP1-row local jog (stays
+    # narrow, genuine tight pitch) and the two row-crossing segments
+    # (handled below, need splitting).
+    for x0, y0, x1, y1, layer in [
+        (11.105, 27.5, 15.5, 27.5, pcbnew.B_Cu),
+        (15.5, 27.5, 16.9, 27.5, pcbnew.F_Cu),
+        (16.9, 27.5, 25.9, 27.5, pcbnew.B_Cu),
+        (25.9, 27.5, 28.3, 27.5, pcbnew.F_Cu),
+        (28.3, 27.5, 28.885, 27.5, pcbnew.B_Cu),
+        (28.885, 56.0, 24.6, 56.0, pcbnew.B_Cu),
+        (24.6, 56.0, 23.0, 56.0, pcbnew.F_Cu),
+        (23.0, 56.0, 22.0, 56.0, pcbnew.B_Cu),
+        (22.0, 56.0, 22.0, 58.15, pcbnew.B_Cu),
+        (22.0, 58.15, 22.0, 60.1, pcbnew.F_Cu),
+        (22.0, 60.1, 22.0, 61.4, pcbnew.B_Cu),
+        (22.0, 61.4, 15.525, 61.4, pcbnew.B_Cu),
+        (15.525, 61.4, 15.525, 61.15, pcbnew.F_Cu),
+    ]:
+        t = find(layer, _mm(x0, y0), _mm(x1, y1))
+        if t is not None and pcbnew.ToMM(t.GetWidth()) < w_v5:
+            t.SetWidth(pcbnew.FromMM(w_v5))
+
+    # x=11.105 vertical (12.15->27.5, F_Cu): crosses J2B's row (15.6) AND
+    # PICO row2 (23.11) -- split into wide/narrow/wide/narrow/wide.
+    p_top, p_bot = _mm(11.105, 12.15), _mm(11.105, 27.5)
+    full = find(pcbnew.F_Cu, p_top, p_bot)
+    if full is not None:
+        full.SetStart(p_top)
+        full.SetEnd(_mm(11.105, J2B_NECK_MM[0]))
+        full.SetWidth(pcbnew.FromMM(w_v5))
+        _add_track(board, ni, pcbnew.F_Cu,
+                   [(11.105, J2B_NECK_MM[0]), (11.105, J2B_NECK_MM[1])], w_default)
+        _add_track(board, ni, pcbnew.F_Cu,
+                   [(11.105, J2B_NECK_MM[1]), (11.105, ROW2_NECK_MM[0])], w_v5)
+        _add_track(board, ni, pcbnew.F_Cu,
+                   [(11.105, ROW2_NECK_MM[0]), (11.105, ROW2_NECK_MM[1])], w_default)
+        _add_track(board, ni, pcbnew.F_Cu, [(11.105, ROW2_NECK_MM[1]), (11.105, 27.5)], w_v5)
+
+    # x=28.885 vertical (27.5->56.0, B_Cu): crosses PICO row1 (40.89) AND
+    # J1B (47.8) -- split into wide/narrow/wide/narrow/wide. This segment
+    # is part of a 4-point _add_track call (28.3,27.5 -> 28.885,27.5 ->
+    # 28.885,56.0 -> 24.6,56.0), which _add_track splits into 3 separate
+    # PCB_TRACK objects -- find() locates the middle one by its own exact
+    # endpoints.
+    j1b_lo, j1b_hi = 47.8 - 0.6, 47.8 + 0.6
+    row1_lo, row1_hi = 40.89 - 0.6, 40.89 + 0.6
+    p_top2, p_bot2 = _mm(28.885, 27.5), _mm(28.885, 56.0)
+    full2 = find(pcbnew.B_Cu, p_top2, p_bot2)
+    if full2 is not None:
+        full2.SetStart(p_top2)
+        full2.SetEnd(_mm(28.885, row1_lo))
+        full2.SetWidth(pcbnew.FromMM(w_v5))
+        _add_track(board, ni, pcbnew.B_Cu, [(28.885, row1_lo), (28.885, row1_hi)], w_default)
+        _add_track(board, ni, pcbnew.B_Cu, [(28.885, row1_hi), (28.885, j1b_lo)], w_v5)
+        _add_track(board, ni, pcbnew.B_Cu, [(28.885, j1b_lo), (28.885, j1b_hi)], w_default)
+        _add_track(board, ni, pcbnew.B_Cu, [(28.885, j1b_hi), (28.885, 56.0)], w_v5)
+
+
 def main():
     """Task 14f scope actually completed: trace bundle, guard nets, the
     SWD/NRESET/P3V3(VTref) tree, breakout stubs, and internal ties -- all
@@ -2376,6 +2609,9 @@ def main():
     _route_pico_row_jog(b)
     _route_final_long_runs(b)
     _widen_vbus_net(b)
+    _widen_v5_jtrace(b)
+    _route_d_vsys(b)
+    _route_decoupling(b)
 
     pcbnew.SaveBoard(BOARD_FILE, b)
     pcbnew.GetSettingsManager().SaveProject()

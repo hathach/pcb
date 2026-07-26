@@ -219,6 +219,13 @@ _add(Part("R_LED_PWR", "1k", "r0402", _pins("1", "2")))
 _add(Part("C_HVBUS_BULK", "22u/10V", "c0805", _pins("1", "2")))
 _add(Part("C_HVBUS_100n", "100n/16V", "c0402", _pins("1", "2")))
 
+# --- Decoupling (Task 18 pre-fab review: no cap anywhere on P3V3, no input
+# bypass on the load switch) -- all 100n/16V 0402, matching the project's
+# existing cap-value convention (C_HVBUS_100n/C_NRESET).
+_add(Part("C_P3V3_1", "100n/16V", "c0402", _pins("1", "2")))     # near PICO pin 36 (3V3)
+_add(Part("C_P3V3_2", "100n/16V", "c0402", _pins("1", "2")))     # near J_STEMMA's 3V3 output
+_add(Part("C_HSW_IN", "100n/16V", "c0402", _pins("1", "2")))     # at U_HSW pin 5 (IN), TI-recommended
+
 # --- Probe points --------------------------------------------------------
 _add(Part("TP1", "TP", "testpoint", _pins("1")))
 _add(Part("TP2", "TP", "testpoint", _pins("1")))
@@ -238,6 +245,14 @@ _add(Part(
 ))
 # D_J9_BUSPWR: optional J9-VBUS -> VBUS_NET bus-power diode (DESIGN SS8.2/SS14).
 _add(Part("D_J9_BUSPWR", "1N4148W", "sod123", _pins("1", "2"), dnp=True))
+# D_VSYS (Task 18, user-approved DESIGN SS7 restore): Schottky diode-ORs
+# VBUS_SEL into VSYS so JP1=JTRACE can power the Pico without touching pin
+# 40/VBUS_NET (which must stay the micro-USB VBUS node for OTG-host use --
+# see the wiring comment below). Same sod123 footprint/pad convention as
+# D_J9_BUSPWR: pad1=CATHODE, pad2=ANODE (verified against the footprint's
+# F.Fab polarity bar, its silk cathode stripe, and Device:D's own pin1=K).
+# Always populated (not DNP) -- this is the real, always-present feed.
+_add(Part("D_VSYS", "B5819W", "sod123", _pins("1", "2")))
 # J_TRACE_TP: REMOVED in Task 14c (SI ruling). Its pads sat directly on
 # TRACECLK/TD0-3 -- as a DNP header hanging off the length-matched bundle it
 # is a stub on every SI-critical net, which DESIGN SS5.4 forbids ("no other
@@ -278,6 +293,15 @@ PARTS["J3"].pins.update({
 # test's assertions don't cover IN's net so the change is safe (verified).
 PARTS["U_HSW"].pins.update({"IN": "VBUS_SEL", "OUT": "HOST_VBUS", "GND": "GND"})
 PARTS["J5"].pins.update({"VBUS": "HOST_VBUS", "GND": "GND"})
+# J5 shell (Task 18 pre-fab review): pad "5" is J5's two PTH mounting/shell
+# posts (mechanical, not a signal pad -- like J8/J9's own shield pad, no
+# logical name was ever given it, so it's set directly by footprint pad
+# number; Part.pad_number()'s padmap.get(pin, pin) fallback resolves the
+# unmapped literal "5" straight through to footprint pad "5"). J8/J9's
+# shields are already grounded; J5's was missed -- an ungrounded host-port
+# shell has no ESD return path. Both physical pads numbered "5" get the
+# net (build_board.py._wire_pads sets every matching pad, not just one).
+PARTS["J5"].pins["5"] = "GND"
 
 # HOST_VBUS bulk + decoupling caps at the connector (SS8.1).
 PARTS["C_HVBUS_BULK"].pins.update({"1": "HOST_VBUS", "2": "GND"})
@@ -449,12 +473,21 @@ PARTS["R_NVD_B"].pins.update({"1": "NATIVE_VBUS_DET", "2": "GND"})
 PARTS["PICO"].pins["21"] = "NATIVE_VBUS_DET"
 
 # --- DNP odds and ends -------------------------------------------------
-# D_J9_BUSPWR (DNP, SOD-123 diode default pad1=A/pad2=K): documents the
+# D_J9_BUSPWR (DNP, SOD-123 diode: pad1=CATHODE/pad2=ANODE -- fixed Task 18;
+# an earlier comment here had this backwards ("pad1=A/pad2=K"), which wired
+# pad1=J9_VBUS/pad2=VBUS_NET and would have conducted VBUS_NET->J9_VBUS,
+# backfeeding the board's 5V rail out of the J9 device receptacle into a
+# host. Verified pad1=cathode against the footprint's F.Fab polarity bar,
+# its silk cathode stripe, and Device:D's own pin1=K): documents the
 # optional J9-VBUS -> VBUS_NET bus-power path per the direction ruling --
-# anode on J9_VBUS, cathode on VBUS_NET, so host VBUS could only ever feed
-# the board rail, never backfeed the host connector. Never populated (dnp),
-# so it can't bridge the two nets in the graph helpers.
-PARTS["D_J9_BUSPWR"].pins.update({"1": "J9_VBUS", "2": "VBUS_NET"})
+# anode (pad2) on J9_VBUS, cathode (pad1) on VBUS_NET, so host VBUS could
+# only ever feed the board rail, never backfeed the host connector. Never
+# populated (dnp), so it can't bridge the two nets in the graph helpers.
+# Board-side: place.py rotates the footprint 180 degrees from its earlier
+# (backwards) orientation so pad1/pad2 land on the exact same physical
+# copper as before -- see place.py's D_J9_BUSPWR comment; no routing
+# geometry changes.
+PARTS["D_J9_BUSPWR"].pins.update({"1": "VBUS_NET", "2": "J9_VBUS"})
 # U_INA219_ALT wiring: see Task 14b section below (module footer) -- it now
 # gets real net assignments instead of an all-nc placeholder.
 
@@ -550,6 +583,26 @@ PARTS["U_INA219_ALT"].pins.update({
     "IN+": "VBUS_SEL", "IN-": "HOST_5V_IN", "GND": "GND", "VS": "P3V3",
     "SDA": "I2C0_SDA", "SCL": "I2C0_SCL", "A0": "GND", "A1": "GND",
 })
+
+
+# --------------------------------------------------------------------------
+# Task 18: pre-fab review fixes -- VSYS feed diode, decoupling caps.
+# --------------------------------------------------------------------------
+
+# --- D_VSYS (see PARTS declaration above): VBUS_SEL -> VSYS Schottky
+# diode-OR, restoring the DESIGN SS7 "JP1=JTRACE can power the Pico"
+# capability without touching VBUS_NET/pin 40 (which stays the micro-USB
+# OTG-host VBUS node -- untouched by this task). Current flows VBUS_SEL ->
+# VSYS only: anode (pad2) on VBUS_SEL, cathode (pad1) on VSYS. Pico's own
+# internal VBUS->VSYS Schottky plus this diode form a diode-OR into VSYS,
+# so no jumper/cable combination can back-feed either source.
+PARTS["D_VSYS"].pins.update({"1": "VSYS", "2": "VBUS_SEL"})
+
+# --- Decoupling (see PARTS declarations above for rationale/placement
+# intent): straightforward bypass caps, no series element / no PINMAP hop.
+PARTS["C_P3V3_1"].pins.update({"1": "P3V3", "2": "GND"})
+PARTS["C_P3V3_2"].pins.update({"1": "P3V3", "2": "GND"})
+PARTS["C_HSW_IN"].pins.update({"1": "HOST_5V_IN", "2": "GND"})
 
 
 # --------------------------------------------------------------------------
