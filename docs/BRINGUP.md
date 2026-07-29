@@ -154,14 +154,29 @@ from, not a redundant sixth entry point.
 
 ## Assembly notes
 
-- All THT parts (`PICO` socket, `J1B`, `J2B`, `JP1`–`JP4`, `J_UART`, `J10`,
-  + `J5`'s 2 mechanical mounting posts) are hand-soldered by the user —
-  see `docs/BOM.csv` for per-part sourcing.
+- **Full assembly (SMT + THT) is the chosen JLC ordering option.** JLCPCB's
+  hand-soldering ("plug-in") service places the THT parts — the Pico
+  socket rows (`PICO1`/`PICO2`), `J1B`, `J2B`, `JP1`–`JP4`, `J_UART`,
+  `J10` — alongside the SMT reflow parts in one JLC assembly order. See
+  `docs/BOM_jlc.csv`/`docs/CPL_jlc.csv` for the full assembly BOM/CPL and
+  `docs/BOM.csv` for per-part sourcing notes.
+- The hand-solder list below now only applies **if ordering bare boards**
+  (no assembly service) instead:
+  - All THT parts (`PICO` socket, `J1B`, `J2B`, `JP1`–`JP4`, `J_UART`,
+    `J10`, + `J5`'s 2 mechanical mounting posts) would be hand-soldered by
+    the user — see `docs/BOM.csv` for per-part sourcing.
 - GND pads on THT parts use thermal relief spokes rather than a solid
   copper flood, so they solder normally with a hand iron (a solid-flood tie
   into the ground plane would act as a heatsink and make hand-soldering
-  those pads difficult or impossible).
+  those pads difficult or impossible) — this also helps JLC's hand-solder
+  line for the same reason.
 - Everything else is SMT, reflow or hand-soldered as the assembler prefers.
+- If JLC's ordering UI forces **Standard** (not Economic) PCBA once THT
+  parts are in the BOM, that's expected on some JLC configurations —
+  proceed with Standard. (JLCPCB's own parts-library listing for the three
+  new THT connectors marks them wave-solder-compatible under both Economic
+  and Standard PCBA, so Economic may also be offered; either way, confirm
+  whichever assembly type JLC selects at checkout.)
 
 ## First-power checklist
 
