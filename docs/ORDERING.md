@@ -106,3 +106,26 @@ primary whenever both are buyable.
 | 1x20 socket x4   | C124410 Ckmtw (Ext)            | C2905423 Kinghelm 8.5mm (Ext)              | either                                  |
 | Micro-B J8/J9    | C132560 Molex genuine (Ext)    | none verified — Global Sourcing if dry     | primary (13k stock at last check)       |
 | STEMMA           | C51940130 XYECONN (measured)   | C160404 JST genuine (if recovered)         | either; genuine preferred if buyable    |
+
+## 7. Live-session substitutions (2nd parts-page snapshot, 11 flagged rows)
+
+The UI's part picker (magnifier per row) shows live warehouse stock inline —
+it outranks every external lookup. Universal escape: DESELECT the row and
+hand-solder that part (recommended outright for J8/J9 — no verified clone).
+
+| Flagged row      | Take in picker                                      |
+| ---------------- | --------------------------------------------------- |
+| 100n C1525       | C307331 (Samsung 50V, Basic) or any 0402 X7R 100n   |
+| 22R C25092       | C114765 Yageo                                       |
+| 15k C25756       | C114761 Yageo                                       |
+| 1k C11702        | C106235 Yageo                                       |
+| 8.2k C413094     | search "8.2k 0402 1%", any in stock                 |
+| LED C12624       | any green 0603 (C2289 = yellow-green hue)           |
+| ESD C7519        | C2687116 UMW clone                                  |
+| 1x03 C124376     | C49257 BOOMELE                                      |
+| Sockets C124410  | C2905423 Kinghelm 8.5mm                             |
+| Buttons C2733655 | C180420 Omron B3S-1000P (same land)                 |
+| J8/J9 C132560    | exact Molex 47346 only; else DESELECT + hand-solder |
+
+Before substituting, hover one ⚠ icon: if the tooltip says "confirm"/"check"
+rather than out-of-stock, those rows may only need their checkbox ticked.
