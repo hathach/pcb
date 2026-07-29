@@ -80,3 +80,29 @@ All are LCSC items too — add to the same cart to combine shipping.
 - Note the JLC order number next to `fab/MANIFEST.txt` for traceability.
 - On arrival: `docs/BRINGUP.md` — first-power checklist, jumper table, then
   the trace bring-up ladder (48 → 80 → 120 → 150 MHz core).
+
+## 6. Order-time part decisions (stock fluctuates — the live parts page arbitrates)
+
+BOM primaries are the preferred parts. If the parts page shows a primary
+out-of-stock, search the fallback (magnifier icon on that row). Prefer
+primary whenever both are buyable.
+
+| Line             | Primary (preferred)            | Fallback (verified)                        | Rule                                    |
+| ---------------- | ------------------------------ | ------------------------------------------ | --------------------------------------- |
+| J3 2x10 1.27mm   | C41360882 XUNPU (measured fit) | C20728453 Samtec (+$16)                    | primary; Samtec only if XUNPU dry (360) |
+| J6 2x5 1.27mm    | C3975188 HCTL (measured fit)   | C448647 Samtec (+$7)                       | primary                                 |
+| 100n 0402        | C1525 (Basic)                  | C307331 Samsung 50V (Basic)                | either                                  |
+| 22u 0805         | C45783 (Basic)                 | C6119898 HRE (Ext)                         | primary if buyable                      |
+| 22R 0402         | C25092 (Basic)                 | C114765 Yageo (Ext)                        | primary if buyable                      |
+| 1.5k 0402        | C25867 (Basic)                 | C114759 Yageo (Ext)                        | primary if buyable                      |
+| 15k 0402         | C25756 (Basic)                 | C114761 Yageo (Ext)                        | primary if buyable                      |
+| 100k 0402        | C25741 (Basic)                 | C60491 Yageo (Ext)                         | primary if buyable                      |
+| 1k 0402          | C11702 (Basic)                 | C106235 Yageo (Ext)                        | primary if buyable                      |
+| 8.2k 0402        | C413094 Panasonic (Ext)        | C25924 (Basic, if recovered)               | fallback preferred if back in stock     |
+| ESD SOT-23-6     | C7519 ST genuine (Ext)         | C2687116 UMW clone (Ext, pin-1 unverified) | primary                                 |
+| LED 0603 green   | C12624 (Ext)                   | C2289 yellow-green (Ext, hue differs)      | primary                                 |
+| Buttons B3S-1000 | C2733655 Omron (Ext)           | C180420 Omron B3S-1000P (same land)        | either (same part, diff packaging)      |
+| 1x03 header      | C124376 Ckmtw (Ext)            | C49257 BOOMELE (Ext)                       | either                                  |
+| 1x20 socket x4   | C124410 Ckmtw (Ext)            | C2905423 Kinghelm 8.5mm (Ext)              | either                                  |
+| Micro-B J8/J9    | C132560 Molex genuine (Ext)    | none verified — Global Sourcing if dry     | primary (13k stock at last check)       |
+| STEMMA           | C51940130 XYECONN (measured)   | C160404 JST genuine (if recovered)         | either; genuine preferred if buyable    |
