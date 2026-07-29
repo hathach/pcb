@@ -69,9 +69,19 @@ live in the repo at `fab/pico2_trace_gerbers.zip`, `docs/BOM_jlc.csv`,
 
 | Item                      | Note                                                                          |
 | ------------------------- | ----------------------------------------------------------------------------- |
+| 1x20 female socket ×4/brd | PICO1/PICO2/J1B/J2B (C124410) — deselected from PCBA 2026-07-29, hand-solder  |
+| 1x03 pin header ×3/brd    | JP1/J_UART/J10 (C124376) — deselected from PCBA, hand-solder                  |
+| 1x02 pin header ×3/brd    | JP2/JP3/JP4 (C124375) — deselected from PCBA, hand-solder                     |
 | 4× jumper shunts, 2.54 mm | JP1–JP4 (fit JP2/JP3/JP4 by default; JP1 to taste)                            |
 | JST-SH cable              | JST-SH→dupont (for J10) or JST-SH→JST-SH (for J7); ships with RPi Debug Probe |
 | M3 screws/standoffs ×4    | MH1–MH4                                                                       |
+
+Deselecting all THT header lines (order session 2026-07-29) cut the Economic
+PCBA quote $82.17 → $71.63 per 2 boards: parts −$3.53, hand-soldering labor
+−$3.58, manual assembly −$3.43; assembly lead time improved 2-3 d → 1-2 d.
+(The $42.98 Extended-components fee did NOT change — JLC charged it on the
+matched lines regardless of deselection.) Re-adding any single THT line brings
+back the ~$7 labor fees, so it's all-or-nothing.
 
 All are LCSC items too — add to the same cart to combine shipping.
 
