@@ -45,12 +45,34 @@ Regions:
   - Top region (above PICO): JP1 near pin 40/VBUS_NET (top-left), JP4 +
     its native-VBUS-detect divider (R_NVD_T/B) and the power LED nearby,
     then the STEMMA-QT / UART / user-button / user-LED peripheral group
-    spread across the rest of the top edge.
+    spread across the rest of the top edge. J_STEMMA is rotated 180 deg
+    (see "Connector orientation" below) so it sits high (y~3.4, near the
+    y=0 top edge) rather than in the same y~9-14 band as its neighbors.
   - Right column (x >= ~66, clear of both MH columns and the debug/top
     regions): J5 (USB-A host) with its ESD/series-R/pulldown/probe-point
     cluster and the load-switch/shunt/current-sense cluster; J8
     (power-only micro-B) below that; J9 (device micro-B) with its own
     ESD/series-R/pull-up/VBUS-divider cluster at the bottom.
+
+Connector orientation (review fix, see task-12-report.md "Fix: connector
+orientations"): the horizontal receptacle footprints used by J5/J8/J9/
+J_STEMMA (USB_A_Molex_67643_Horizontal, USB_Micro-B_Molex_47346-0001,
+JST_SH_SM0xB..._Horizontal) all mate along their local +Y at rest (0 deg).
+With SetOrientationDegrees, local +Y maps to world +X at 90 deg, world -Y
+at 180 deg, world -X at 270 deg. J5/J8/J9 are rotated 90 deg so their
+opening faces world +X (the x=110 right edge, where they're anchored);
+J_STEMMA is rotated 180 deg so its opening faces world -Y (the y=0 top
+edge). J4/J7 (jst_sh3, debug group) are left at 0 deg -- their opening
+already faces world +Y (the bottom edge), which is correct as-is. Each
+rotated receptacle's anchor x/y was re-derived from its *real* courtyard
+bbox at the new rotation (queried via pcbnew, not guessed -- the courtyard
+is asymmetric relative to the anchor for usb_a/jst_sh4, so a straight
+angle-preserving translation of the old anchor would have been wrong): the
+mating face sits at/flush-to-slightly-overhanging its target board edge,
+and J5/J8/J9's y (and their satellite clusters, rigidly translated with
+them) were nudged from the brief's informal y~15/38/58 to y=21.5/42/62 so
+the rotated (taller) J5 courtyard clears MH2, and every adjacent pair of
+J5/J8/J9 courtyards keeps >=10 mm of clear space (room to grip a plug).
 """
 
 from __future__ import annotations
@@ -94,22 +116,38 @@ POS: dict[str, tuple[float, float, float]] = {
     "R_NVD_B": (18.0, 12.5, 0),
     "LED_PWR": (22.0, 9.5, 0),
     "R_LED_PWR": (22.0, 12.0, 0),
-    "J_STEMMA": (29.0, 10.0, 0),
+    # Review fix: rotated 180 (opening -> world -Y) and re-anchored so the
+    # mating face sits at y~0.075 (essentially flush with the y=0 top edge,
+    # per "at/near the y=0 edge" -- not overhung, unlike J5/J8/J9, since the
+    # brief only asked for at/near here and this connector's own mounting
+    # tabs are the closest copper to that edge).
+    "J_STEMMA": (29.0, 3.4, 180),
     "J_UART": (38.0, 11.0, 90),
     "SW_USER": (51.0, 11.0, 0),
     "LED_USER": (59.0, 10.0, 0),
     "R_LED_USER": (59.0, 13.0, 0),
 
     # --- Right column: J5 (USB-A host) + its cluster.
-    "J5": (98.0, 15.0, 0),
-    "R_HDP": (72.0, 13.0, 0),
-    "R_HDM": (72.0, 18.0, 0),
-    "R_HDP_PD": (77.0, 13.0, 0),
-    "R_HDM_PD": (77.0, 18.0, 0),
-    "ESD_H": (82.0, 15.5, 0),
-    "TP1": (87.0, 11.0, 0),
-    "TP2": (87.0, 20.0, 0),
-    "TP3": (87.0, 15.5, 0),
+    # Review fix: rotated 90 (opening -> world +X) and re-anchored so the
+    # mating face sits at x=110.15 (0.15 mm overhang past the x=110 right
+    # edge, matching J8/J9 -- "flush-to-slightly-overhanging"). y moved
+    # 15 -> 21.5 (real rotated courtyard bbox is asymmetric, extending
+    # 12.126 mm above the anchor vs. 5.126 mm below) so it clears MH2's
+    # courtyard (bottom edge y=7.5) by >1.8 mm. Satellite cluster below
+    # rigidly translated by the same (dx,dy) = (-1.385, +6.5) to stay
+    # adjacent to J5's (moved) signal pads.
+    "J5": (96.615, 21.5, 90),
+    "R_HDP": (70.615, 19.5, 0),
+    "R_HDM": (70.615, 24.5, 0),
+    "R_HDP_PD": (75.615, 19.5, 0),
+    "R_HDM_PD": (75.615, 24.5, 0),
+    "ESD_H": (80.615, 22.0, 0),
+    "TP1": (85.615, 17.5, 0),
+    "TP2": (85.615, 26.5, 0),
+    "TP3": (85.615, 22.0, 0),
+    # Load-switch/shunt/current-sense cluster: x well clear of J5/J8's
+    # rotated courtyards (left edge >=103.5) regardless of y -- no move
+    # needed for courtyard-cleanliness.
     "R_SHUNT": (73.0, 36.0, 0),
     "U_HSW": (79.0, 36.0, 0),
     "U_ISNS": (73.0, 42.0, 0),
@@ -117,16 +155,27 @@ POS: dict[str, tuple[float, float, float]] = {
     "C_HVBUS_100n": (85.0, 42.0, 0),
 
     # --- Right column: J8 (power-only micro-B).
-    "J8": (98.0, 38.0, 0),
+    # Review fix: rotated 90 (opening -> world +X); re-anchored so the
+    # mating face sits at x=110.15 (same 0.15 mm overhang as J5/J9). y
+    # nudged 38 -> 42 to keep >=10 mm clear between J5's and J8's rotated
+    # courtyards (10.6 mm) -- J8 has no satellite parts to move.
+    "J8": (106.255, 42.0, 90),
 
     # --- Right column: J9 (device micro-B) + its cluster.
-    "J9": (98.0, 58.0, 0),
-    "R_DDP": (72.0, 56.0, 0),
-    "R_DDM": (72.0, 60.0, 0),
-    "ESD_D": (77.0, 58.0, 0),
-    "R_DPU": (83.0, 56.0, 0),
-    "R_J9VD_T": (83.0, 60.0, 0),
-    "R_J9VD_B": (83.0, 64.0, 0),
+    # Review fix: rotated 90 (opening -> world +X); re-anchored so the
+    # mating face sits at x=110.15 (same overhang). y nudged 58 -> 62 to
+    # keep >=10 mm clear between J8's and J9's rotated courtyards
+    # (10.5 mm). Satellite cluster rigidly translated by the same
+    # (dx,dy) = (+8.255, +4.0) as J9's anchor move (J9's real courtyard is
+    # much shallower than J5's usb_a one, so the x correction is larger)
+    # to stay adjacent to J9's (moved) signal pads.
+    "J9": (106.255, 62.0, 90),
+    "R_DDP": (80.255, 60.0, 0),
+    "R_DDM": (80.255, 64.0, 0),
+    "ESD_D": (85.255, 62.0, 0),
+    "R_DPU": (91.255, 60.0, 0),
+    "R_J9VD_T": (91.255, 64.0, 0),
+    "R_J9VD_B": (91.255, 68.0, 0),
 }
 
 # Trace silk (G-4): small warning text near the J1B breakout pads that carry

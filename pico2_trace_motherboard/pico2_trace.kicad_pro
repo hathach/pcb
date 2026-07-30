@@ -339,6 +339,18 @@
       {
         "netclass": "Trace",
         "pattern": "TD3"
+      },
+      {
+        "netclass": "Power",
+        "pattern": "VBUS_SEL"
+      },
+      {
+        "netclass": "Power",
+        "pattern": "HOST_5V_IN"
+      },
+      {
+        "netclass": "Power",
+        "pattern": "J9_VBUS"
       }
     ]
   },
