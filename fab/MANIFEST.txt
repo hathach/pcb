@@ -85,3 +85,14 @@ DRC at generation time: 0 unconnected_items, 2 silk_edge_clearance
 
 fab/ is gitignored; this MANIFEST.txt is force-added so the ordered
 board revision stays unambiguous without committing binary fab output.
+
+JLCPCB order (2026-07-30)
+-------------------------
+Order number    : W2026073018593887  (placed 2026-07-30 17:59:08, In Production)
+PCB             : Y14-4313885A, 5 pcs, $2.00, 24h build
+Assembly        : Economic PCBA SMT026073061043-4313885A, 2 of 5 boards,
+                  all 28 BOM lines assembled (both USB Type-C C165948)
+Totals          : merchandise $72.47 (after -$9 coupon) + shipping $8.80
+                  = $81.27
+Pre-order audit : three-reviewer sweep (footprints / wiring / fab package),
+                  no fab-blocking defect -- see commit 0218f22.

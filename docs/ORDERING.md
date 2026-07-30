@@ -88,7 +88,8 @@ All are LCSC items too — add to the same cart to combine shipping.
 
 ## 5. After ordering
 
-- Note the JLC order number next to `fab/MANIFEST.txt` for traceability.
+- Ordered 2026-07-30: **W2026073018593887** (Y14, 5 PCB / 2 assembled,
+  $81.27) — recorded in `fab/MANIFEST.txt`.
 - On arrival: `docs/BRINGUP.md` — first-power checklist, jumper table, then
   the trace bring-up ladder (48 → 80 → 120 → 150 MHz core).
 
