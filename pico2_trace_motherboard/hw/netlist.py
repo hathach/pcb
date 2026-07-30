@@ -122,7 +122,17 @@ _add(Part(
     _pins("VBUS", "DM", "DP", "GND"),
     padmap={"VBUS": "1", "DM": "2", "DP": "3", "GND": "4"},
 ))
-_add(Part("J8", "USB-MICROB PWR", "usb_microb", _numbered(6)))   # 1 VBUS,2 D-,3 D+,4 ID,5 GND,6 shield
+# J8 (user request, 2026-07-30 order session): micro-B -> USB Type-C
+# (power-only 5V input). fp_class usb_c_pwr's renumbered pads: 1=VBUS
+# (A4/B9 column), 2=CC1, 3=CC2, 4=GND, 5=NC (D+/D-/SBU), 6=shield,
+# 7=VBUS second column (A9/B4) -- board-NC, because the footprint's NPTH
+# alignment peg blocks every legal 0.2mm escape from that column
+# (DRC-proven); the mating plug parallels all four VBUS beams, so A4/B9
+# alone (2 contacts, 1.25A each per the Type-C spec) covers the 5V input.
+# CC1/CC2 each need a 5.1k Rd to GND (R_CC1/R_CC2 below) so a Type-C
+# source/charger presents VBUS at all -- a bare CC pin gets 0V from a
+# compliant supply.
+_add(Part("J8", "USB-C PWR", "usb_c_pwr", _numbered(7)))
 _add(Part("J9", "USB-MICROB DEV", "usb_microb", _numbered(6)))
 
 # --- Peripherals -----------------------------------------------------------
@@ -204,6 +214,13 @@ _add(Part("R_NVD_T", "8.2k", "r0402", _pins("1", "2")))   # native VBUS-detect d
 _add(Part("R_NVD_B", "8.2k", "r0402", _pins("1", "2")))   # native VBUS-detect divider, bottom leg (-> GND)
 _add(Part("R_J9VD_T", "8.2k", "r0402", _pins("1", "2")))  # J9 VBUS-detect divider, top leg
 _add(Part("R_J9VD_B", "8.2k", "r0402", _pins("1", "2")))  # J9 VBUS-detect divider, bottom leg (-> GND)
+
+# --- J8 Type-C CC pull-downs (Rd, USB Type-C spec 4.5.1.2.3) ----------------
+# 5.1k +-10% max from each CC pin to GND marks the port as a UFP power sink;
+# without them a compliant Type-C source never enables VBUS. Wired in the
+# Task-4 power section alongside J8 itself.
+_add(Part("R_CC1", "5.1k", "r0402", _pins("1", "2")))     # J8 CC1 -> GND
+_add(Part("R_CC2", "5.1k", "r0402", _pins("1", "2")))     # J8 CC2 -> GND
 
 # --- LEDs + series resistors -------------------------------------------
 # Placeholder 1k series value; final current-limit value is a BOM tuning
@@ -307,7 +324,12 @@ PARTS["J5"].pins["5"] = "GND"
 PARTS["C_HVBUS_BULK"].pins.update({"1": "HOST_VBUS", "2": "GND"})
 PARTS["C_HVBUS_100n"].pins.update({"1": "HOST_VBUS", "2": "GND"})
 
-PARTS["J8"].pins.update({"1": "VBUS_NET", "5": "GND"})   # micro-B PWR: 1=VBUS,5=GND
+# J8 (Type-C power-only, renumbered pads -- see the Part definition): VBUS
+# pad group -> VBUS_NET, GND pad group -> GND. CC1/CC2 get their own nets so
+# the Rd resistors are a real series element (net-naming convention above).
+PARTS["J8"].pins.update({"1": "VBUS_NET", "4": "GND", "2": "J8_CC1", "3": "J8_CC2"})
+PARTS["R_CC1"].pins.update({"1": "J8_CC1", "2": "GND"})
+PARTS["R_CC2"].pins.update({"1": "J8_CC2", "2": "GND"})
 
 # Debug-jack + peripheral + ESD grounds (signal pins left for their own tasks).
 PARTS["J7"].pins["2"] = "GND"          # JST-SH-3 DEBUG_PROBE: 1=SWCLK,2=GND,3=SWDIO
@@ -547,14 +569,16 @@ for _pico_pad, _net in PARTS["PICO"].pins.items():
 # --------------------------------------------------------------------------
 # Task 8: connectivity lint -- nc entries + wiring fixes found by test_lint
 # --------------------------------------------------------------------------
-# J8 (DESIGN SS7 table: "power-only (VBUS+GND; D+/D- NC)"): D-/D+/ID are
-# genuinely unused on this power-only micro-B -- no-connect, not a bug.
-PARTS["J8"].nc |= {"2", "3", "4"}
+# J8 (DESIGN SS7 table: "power-only"; Type-C since 2026-07-30): pad "5" is
+# the D+/D-/SBU cluster of the renumbered usb_c_pwr footprint -- genuinely
+# unused on a power-only port -- no-connect, not a bug. Pad "7" is the
+# second VBUS column (A9/B4), board-NC per the Part definition comment.
+# (The old micro-B nc set {"2","3","4"} = D-/D+/ID; pads 2-4 now carry
+# CC1/CC2/GND.)
+PARTS["J8"].nc |= {"5", "7"}
 
-# J8 shield (pad 6, per the Task-3 comment "6 shield"): wiring bug, not a
-# legitimate nc. J9 is the same usb_microb footprint and Task 6 already ties
-# its shield pad to GND (PARTS["J9"].pins["6"] = "GND"); J8 never got the
-# matching tie in Task 4. Fixed here for consistency instead of nc'ing it.
+# J8 shield (pad 6, 4x PTH legs): tied to GND, same treatment as J9's
+# micro-B shield (PARTS["J9"].pins["6"] = "GND").
 PARTS["J8"].pins["6"] = "GND"
 
 # J9 ID (DESIGN SS8.2: self-powered, detect-only device port -- no OTG role

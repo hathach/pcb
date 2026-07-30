@@ -281,7 +281,13 @@ _STITCH_VIAS_FRAGMENT_FIX = [
 _STITCH_VIAS_SPREAD = [
     (6.0, 6.0), (6.0, 14.0), (6.0, 22.0), (6.0, 30.0),
     (14.0, 6.0), (14.0, 14.0), (14.0, 30.0),
-    (22.0, 6.0), (22.0, 14.0), (22.0, 54.0),
+    # (22.0, 6.0) -> (23.6, 6.9): the grid spot now sits between R_CC1/
+    # R_CC2 and their CC stub drops (J8 Type-C swap, 2026-07-30) --
+    # hole/clearance violations against both resistors' pad "1" and a
+    # dangling F-side. The replacement sits in the open F_Cu pocket
+    # between R_CC2's courtyard (east edge 23.0) and J8's body (west
+    # edge 24.08), same fragment it was stitching.
+    (23.6, 6.9), (22.0, 14.0), (22.0, 54.0),
     (30.0, 14.0), (30.0, 54.0),
     (38.0, 6.0), (38.0, 14.0), (38.0, 30.0), (41.0, 38.0), (38.0, 54.0),
     (46.0, 54.0),

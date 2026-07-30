@@ -69,19 +69,33 @@ live in the repo at `fab/pico2_trace_gerbers.zip`, `docs/BOM_jlc.csv`,
 
 | Item                      | Note                                                                          |
 | ------------------------- | ----------------------------------------------------------------------------- |
-| 1x20 female socket ×4/brd | PICO1/PICO2/J1B/J2B (C124410) — deselected from PCBA 2026-07-29, hand-solder  |
 | 1x03 pin header ×3/brd    | JP1/J_UART/J10 (C124376) — deselected from PCBA, hand-solder                  |
 | 1x02 pin header ×3/brd    | JP2/JP3/JP4 (C124375) — deselected from PCBA, hand-solder                     |
 | 4× jumper shunts, 2.54 mm | JP1–JP4 (fit JP2/JP3/JP4 by default; JP1 to taste)                            |
 | JST-SH cable              | JST-SH→dupont (for J10) or JST-SH→JST-SH (for J7); ships with RPi Debug Probe |
 | M3 screws/standoffs ×4    | MH1–MH4                                                                       |
 
-Deselecting all THT header lines (order session 2026-07-29) cut the Economic
-PCBA quote $82.17 → $71.63 per 2 boards: parts −$3.53, hand-soldering labor
-−$3.58, manual assembly −$3.43; assembly lead time improved 2-3 d → 1-2 d.
-(The $42.98 Extended-components fee did NOT change — JLC charged it on the
-matched lines regardless of deselection.) Re-adding any single THT line brings
-back the ~$7 labor fees, so it's all-or-nothing.
+Assembly-config history (2026-07-29/30 order sessions): deselecting ALL THT
+header lines cut the Economic PCBA quote $82.17 → $71.63 per 2 boards (parts
+−$3.53, hand-solder labor −$3.58, manual assembly −$3.43; lead time 2-3 d →
+1-2 d; the $42.98 Extended-parts fee did NOT change — JLC charges it on
+matched lines regardless of deselection). Final config per user decision:
+**sockets (PICO1/PICO2/J1B/J2B) back IN** — the carrier is the point of the
+board — **pin headers stay out** (trivial to hand-solder, and any single THT
+line re-adds the ~$7 labor fees anyway, so keeping the 6 tiny headers out
+costs nothing extra once the sockets are back).
+
+## 8. J8 micro-B → USB Type-C (2026-07-30, pre-order board change)
+
+`J8` (5V-IN power port) was rebuilt as USB Type-C before ordering: LCSC
+**C165948** (HRO TYPE-C-31-M-12, JLC **Basic** — cheaper than the Molex
+micro-B it replaces) + **R_CC1/R_CC2** 5.1 kΩ 0402 Rd pull-downs (LCSC
+**C25905**, Basic; any in-stock 5.1k 0402 substitutes fine — the Type-C spec
+allows ±10%). New fab zip + BOM_jlc/CPL_jlc regenerated — re-upload ALL
+THREE files when re-ordering; the old Y-revisions in the JLC cart predate
+this change. Gates at regeneration: DRC 0 unconnected + the 2 known silk
+warnings only, ERC warnings-only, model↔schematic netlists match, GND pour
+union-find = 1 component.
 
 All are LCSC items too — add to the same cart to combine shipping.
 
