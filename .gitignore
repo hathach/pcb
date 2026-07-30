@@ -1,3 +1,2 @@
 # Each board is its own independent git repo -- never embedded in the
-# umbrella repo (see CLAUDE.md).
-pico2_trace_motherboard/
+# umbrella repo; boards live INSIDE this repo (monorepo, Adafruit-style).
