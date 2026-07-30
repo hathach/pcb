@@ -232,8 +232,77 @@ POS: dict[str, tuple[float, float, float]] = {
     "ESD_D": (77.5, 44.7, 0),
     "R_J9VD_B": (80.9, 47.3, 270),
     "R_J9VD_T": (82.6, 47.3, 90),
-    "D_J9_BUSPWR": (77.7, 50.5, 180),
+    # Task 18: rotation flipped 180->0 to match the netlist.py pad-direction
+    # fix (pad1=CATHODE/VBUS_NET, pad2=ANODE/J9_VBUS, was backwards). The
+    # SOD-123 footprint's two pads are symmetric rectangles at local
+    # (-1.65,0)/(+1.65,0) about this same center -- a 180 degree rotation
+    # swaps which physical world location each pad NUMBER sits at (was:
+    # pad1 east @79.35/pad2 west @76.05; now: pad1 west/pad2 east), which
+    # combined with the netlist swap lands each NET on the exact same
+    # physical copper as before (west=VBUS_NET, east=J9_VBUS, unchanged) --
+    # zero routing geometry change, see route_trace.py's matching pad-
+    # number swap.
+    "D_J9_BUSPWR": (77.7, 50.5, 0),
     "J9": (88.255, 45.0, 90),
+
+    # --- Task 18: VSYS feed diode + decoupling caps (pre-fab review).
+    # D_VSYS sits in the open PICO/J2B row gap (courtyard-clear band
+    # y=17.395-20.415, verified via pcbnew courtyard survey), close to
+    # PICO pin 39's own X column -- rotation 0 (2.39mm tall) fits the
+    # 3.02mm gap with 0.315mm clear top/bottom. x=4.9 (not pin 39's exact
+    # 4.755): DRC-caught a 0.19mm clearance shortfall (needs 0.2mm)
+    # between pad1 and the adjacent VBUS_NET vertical track at x=2.215;
+    # +0.145mm gives real margin. Its VSYS leg still lands squarely on
+    # J2B.19 (a waypoint, not the part's own X); its VBUS_SEL leg jogs
+    # east (open gap territory) to the J2B pad37/pad38 half-pitch gap
+    # column (x=8.565 -- NOT the nearer pad18/pad19 gap, which has a
+    # pre-existing GND stitching via right in its path) before crossing
+    # J2B's row -- see route_trace.py.
+    "D_VSYS": (4.9, 18.905, 0),
+
+    # C_P3V3_1: NOT in the PICO/J2B row gap near pin 36 -- three problems
+    # ruled that whole corridor out (task-18-report.md has the full
+    # bisection): (a) centred on P3V3's own column (x=12.375, rot=90)
+    # shorted the GND pad against that 0.5mm track; (b) offset to
+    # x=13.575 (rot=0) needed a tap crossing GP28/AREF's own breakout
+    # columns; (c) even after fixing (a)/(b), DRC-caught a *zone*
+    # `unconnected_items` fault -- the F.Cu GND zone's fill splits into
+    # two regions that don't touch, reported at the board's own top-left
+    # rounded-corner outline vertex (0.3,3.0), nowhere near this part.
+    # Bisected: adding a second new GND pad anywhere in this gap corridor
+    # (alongside C_P3V3_2, itself unavoidably new GND-bearing copper)
+    # destabilises the zone-fill solver's global result at that distant,
+    # already-marginal corner (MH1 + the rounded corner + VBUS_NET's own
+    # track there) -- not fixable by relocating within the corridor, only
+    # by leaving it. Placed instead in the open JP4<->J_STEMMA band
+    # (tested clear of the zone fault), tapping P3V3's existing B_Cu run
+    # at x=41.585 (the same one J_STEMMA's own VTref-adjacent supply
+    # uses) -- see route_trace.py.
+    "C_P3V3_1": (28.0, 11.0, 180),
+
+    # C_P3V3_2: south of J_STEMMA, in the open band between J_STEMMA's own
+    # courtyard (bottom 7.225) and J2B's row (top 13.755). Two long
+    # horizontal F_Cu tracks cross this band at this X: NVD_TOP at y=9.51
+    # (x=22.27-52.9) and GP10 at y=12.11 (x=33.965-56.3) -- DRC-caught
+    # shorting/crossing at earlier y=10.2/11.5 attempts. rot=0 (not
+    # 270/90): the pocket between them (y~10.09-11.53) is only 1.44mm
+    # tall, too short for the diode-style 1.91mm rotated-90/270 footprint
+    # height but comfortable for rot=0's 1.01mm height. Centred at
+    # y=10.8. The P3V3 tap still has to physically cross NVD_TOP's own Y
+    # to reach J_STEMMA.2 further north -- done as a B_Cu via-hop in
+    # route_trace.py (same technique as every other same-layer-obstacle
+    # crossing in this file), not by placement alone.
+    "C_P3V3_2": (48.6, 10.8, 0),
+
+    # C_HSW_IN: at U_HSW pin 5 (IN) -- TI recommends 0.1uF at IN; both
+    # existing HVBUS caps are on the OUT side. The original spot
+    # (67.5,39.2) collided with HOST_VBUS_EN's own track (runs right
+    # through x=67.0, y=39.15-39.85, DRC-caught). Relocated south/east of
+    # U_HSW/R_HVEN_PD's courtyards and clear of a GND stitching via at
+    # (70,38) -- verified via a full corridor survey (task-18-report.md).
+    # A short jog (see route_trace.py) reaches the HOST_5V_IN spine's own
+    # end point at (67.300,37.250).
+    "C_HSW_IN": (68.5, 41.0, 0),
 }
 
 # Trace silk (G-4): warning text in the J1B -> debug-row gap, centred in the
@@ -246,16 +315,22 @@ TRACE_SILK_THICKNESS_MM = 0.15
 # Board identification silk (Adafruit-practice pass, G-4): the reverted
 # (Task 14g) stock RaspberryPi_Pico_Common_THT footprint already carries its
 # own "USB Cable"/"Possible Antenna"/"Keep Out" orientation silk, so nothing
-# extra is needed there. Placed in
-# the open corridor between the host/power clusters (nothing else lives at
-# x 50..60, y 30..40 -- that column is reserved for 14f's gap-crossing
-# routing lanes, which live on copper layers and don't conflict with silk).
+# extra is needed there.
+#
+# Task 16: the original spot (38.0, 33.0) sat directly between PICO's two
+# THT pad rows -- i.e. underneath the Pico module once one is plugged in,
+# never visible at the bench. Moved to a permanently-visible spot in the
+# open strip along the top edge (y<~3mm, clear of every part's courtyard --
+# J_STEMMA ends x=52.045, SW_USER's courtyard doesn't start until y=3.99,
+# LED_USER/R_LED_USER sit further south at y>=7 -- confirmed empty via a
+# board-wide obstacle scan, not eyeballed). Shrunk slightly (1.5->1.2mm /
+# 1.2->1.0mm) to fit the shallower band comfortably with real margin.
 BOARD_NAME_TEXT = "PICO2 TRACE MB"
-BOARD_NAME_POS = (38.0, 33.0)
-BOARD_NAME_SIZE_MM = 1.5
+BOARD_NAME_POS = (64.0, 2.0)
+BOARD_NAME_SIZE_MM = 1.2
 BOARD_REV_TEXT = "REV A"
-BOARD_REV_POS = (38.0, 35.6)
-BOARD_REV_SIZE_MM = 1.2
+BOARD_REV_POS = (64.0, 4.3)
+BOARD_REV_SIZE_MM = 1.0
 BOARD_ID_THICKNESS_MM = 0.15
 
 # Reference-designator silk pass (Task 14e): every ref shrinks to a compact,
@@ -267,6 +342,17 @@ REF_SIZE_MM = 0.8
 REF_THICK_MM = 0.15
 REF_SILK_CLEARANCE_MM = 0.15  # project's own board silk clearance rule is 0
 REF_EDGE_MARGIN_MM = 0.4  # keep ref text well clear of Edge.Cuts
+
+# Task 16b: the one genuinely crowded region on the board (per the task-16
+# report's "6/52 refs >3mm from their own courtyard" finding) -- the Rt
+# source-resistor row wedged hard against PICO/J1B, plus its two
+# neighbouring two-part clusters that share the same tight real estate
+# (R_LED_PWR/LED_PWR in the top-left corner, R_NVD_T/R_NVD_B east of
+# J_STEMMA). `place_refs` places this set first (worst static crowding
+# first), ahead of the other 43 refs, which keep their original
+# alphabetical order -- see `place_refs`'s docstring for why the reorder is
+# scoped to just this cluster instead of a full 52-ref reorder.
+_CROWDED_CLUSTER = ["Rt1", "Rt2", "Rt3", "Rt4", "Rt5", "R_LED_PWR", "LED_PWR", "R_NVD_T", "R_NVD_B"]
 
 
 def _mm(x: float, y: float) -> "pcbnew.VECTOR2I":
@@ -334,6 +420,170 @@ def add_board_id_silk(board) -> None:
     _text(BOARD_REV_TEXT, BOARD_REV_POS, BOARD_REV_SIZE_MM)
 
 
+# Function-label silk pass (Task 16, user request): the board already had
+# correct refdes but no legend saying what each connector/jumper *does* --
+# JP1 in particular (the 5V source selector) needs to be readable at the
+# bench without a schematic in hand. Every (text, x, y, justify) entry
+# below was hand-placed against real pad/courtyard/existing-silk geometry
+# (queried via pcbnew, same discipline as the POS table) in the open silk
+# real estate immediately around each connector, then verified by a full
+# DRC pass (see task-16-report.md) -- not eyeballed. `H`/`L`/`R` = KiCad's
+# CENTER/LEFT/RIGHT text justify (position = the justified anchor point,
+# not a bounding-box corner). Called *before* `place_refs` so the refdes
+# search (which already treats existing F.SilkS board text as an obstacle)
+# naturally routes ref designators around these labels instead of the
+# other way around.
+FUNC_LABEL_SIZE_MM = 0.8
+FUNC_LABEL_THICK_MM = 0.15
+
+# Task 16b fix: KiCad's silk_edge_clearance DRC rule only evaluates
+# PCB_SHAPE items against Edge.Cuts, never PCB_TEXT glyph geometry -- so a
+# hand-placed label (like "GUARD GP0" above, which overhung the left board
+# edge by 0.093mm) has no automated gate. `place_refs` already solves this
+# for reference designators with a `safe_area` clamp; give function labels
+# the same one, at the board's copper-to-edge margin (matches hw/pour.py's
+# 0.3mm zone inset) rather than place_refs' own 0.4mm ref-specific margin.
+FUNC_LABEL_EDGE_MARGIN_MM = 0.3
+
+FUNC_LABELS: list[tuple[str, float, float, int]] = [
+    # JP1 (5V source selector): title + pin-1/pin-3 end labels. Pin 1 =
+    # V5_JTRACE, pin 2 = VBUS_SEL (common), pin 3 = VBUS_NET; shunt 1-2 =
+    # J-Trace powered, 2-3 = USB powered.
+    ("5V SEL", 12.5, 8.55, 0),      # H, above the row
+    ("JTRACE", 10.6, 12.85, 2),     # R, right edge at pin 1 (x=9.96)
+    ("VBUS", 14.4, 12.85, 1),       # L, left edge at pin 3 (x=15.04)
+    # JP2/JP3 guard jumpers, JP4 VBUS-detect jumper.
+    ("GUARD GP0", 3.5, 50.0, 0),
+    ("GUARD GP6", 23.75, 50.0, 0),
+    ("VBUS DET", 21.0, 8.55, 0),
+    # Connectors.
+    ("USB HOST", 80.0, 11.6, 0),    # J5
+    ("5V IN", 29.4, 7.0, 0),        # J8
+    ("USB DEV", 88.86, 39.5, 0),    # J9
+    ("ETM TRACE", 14.89, 54.3, 0),  # J3
+    ("SWD", 52.4, 54.3, 0),         # J6
+    ("PROBE", 69.57, 54.3, 0),      # J7
+    ("SWD", 61.14, 54.3, 0),        # J10 title
+    ("CLK", 58.6, 60.0, 0),         # J10 pin 1
+    ("G", 61.14, 60.0, 0),          # J10 pin 2
+    ("IO", 63.68, 60.0, 0),         # J10 pin 3
+    ("TX", 59.26, 12.9, 0),         # J_UART pin 1
+    ("RX", 61.8, 12.9, 0),          # J_UART pin 2
+    ("G", 64.34, 12.9, 0),          # J_UART pin 3
+    ("QT", 48.1, 7.7, 0),           # J_STEMMA
+    ("D+", 61.675, 14.6, 0),        # TP1
+    ("D-", 61.675, 25.5, 0),        # TP2
+    ("G", 69.3, 25.4, 0),           # TP3
+    # Task 18 pre-fab review: SW1/SW_USER had only a bare refdes, no
+    # function label. Placed in verified-clear open bands (see
+    # task-18-report.md) -- RESET north of SW1, between D_J9_BUSPWR
+    # (bottom 51.695) and C_NRESET (top 54.89); USER north of SW_USER, in
+    # the open strip along the top board edge.
+    ("RESET", 79.06, 53.0, 0),      # SW1
+    # x=74.0 (not SW_USER's own centre, 71.5): the board-name text
+    # ("PICO2 TRACE MB") spans x=56.3-71.7 at this same y-band -- DRC-
+    # caught silk_overlap at 71.5. 74.0 clears it with margin.
+    ("USER", 74.0, 2.2, 0),         # SW_USER
+]
+
+# JP1 pin-1 marker: small filled dot just outside the header's own left
+# rail (x=8.52), clear of both the pad (left edge ~9.11) and the "JTRACE"
+# label below it.
+JP1_PIN1_MARKER_POS = (8.2, 10.655)
+JP1_PIN1_MARKER_RADIUS_MM = 0.15
+
+
+def _clamp_text_to_safe_area(txt, safe_area) -> None:
+    """Shift `txt`'s position (preserving its size/angle/justify) so its
+    glyph bounding box lies fully inside `safe_area`. A no-op if the text
+    is already inside. See `FUNC_LABEL_EDGE_MARGIN_MM`'s docstring for why
+    this exists -- DRC does not check this for PCB_TEXT."""
+    import pcbnew as _pcbnew
+
+    bb = txt.GetBoundingBox()
+    dx = dy = 0
+    if bb.GetLeft() < safe_area.GetLeft():
+        dx = safe_area.GetLeft() - bb.GetLeft()
+    elif bb.GetRight() > safe_area.GetRight():
+        dx = safe_area.GetRight() - bb.GetRight()
+    if bb.GetTop() < safe_area.GetTop():
+        dy = safe_area.GetTop() - bb.GetTop()
+    elif bb.GetBottom() > safe_area.GetBottom():
+        dy = safe_area.GetBottom() - bb.GetBottom()
+    if dx or dy:
+        txt.SetPosition(txt.GetPosition() + _pcbnew.VECTOR2I(dx, dy))
+
+
+def add_function_labels(board) -> None:
+    """Add (or update in place) every connector/jumper function label in
+    `FUNC_LABELS`, plus JP1's pin-1 marker dot.
+
+    Idempotent: matched by (exact text, position within 1mm) rather than
+    text alone -- several labels share the same string ("SWD" x2, "G" x3)
+    at different positions, so a text-only match (as `add_trace_silk`/
+    `add_board_id_silk` use, safe there since those strings are unique)
+    would conflate them.
+
+    Task 16b: every placed/updated text is clamped inside a board-edge
+    safe area (`_clamp_text_to_safe_area`) before this function returns --
+    see `FUNC_LABEL_EDGE_MARGIN_MM`.
+    """
+    import pcbnew as _pcbnew
+
+    H, L, R = (
+        _pcbnew.GR_TEXT_H_ALIGN_CENTER,
+        _pcbnew.GR_TEXT_H_ALIGN_LEFT,
+        _pcbnew.GR_TEXT_H_ALIGN_RIGHT,
+    )
+    justify_map = {0: H, 1: L, 2: R}
+
+    m = FUNC_LABEL_EDGE_MARGIN_MM
+    safe_area = _pcbnew.BOX2I(
+        _pcbnew.VECTOR2I(_pcbnew.FromMM(m), _pcbnew.FromMM(m)),
+        _pcbnew.VECTOR2I(_pcbnew.FromMM(92.0 - 2 * m), _pcbnew.FromMM(64.0 - 2 * m)),
+    )
+
+    def _existing_text(text, x, y, tol=1.0):
+        for d in board.GetDrawings():
+            if isinstance(d, _pcbnew.PCB_TEXT) and d.GetLayer() == _pcbnew.F_SilkS and d.GetText() == text:
+                p = d.GetPosition()
+                if abs(_pcbnew.ToMM(p.x) - x) < tol and abs(_pcbnew.ToMM(p.y) - y) < tol:
+                    return d
+        return None
+
+    for text, x, y, justify_code in FUNC_LABELS:
+        txt = _existing_text(text, x, y)
+        if txt is None:
+            txt = _pcbnew.PCB_TEXT(board)
+            board.Add(txt)
+        txt.SetText(text)
+        txt.SetLayer(_pcbnew.F_SilkS)
+        txt.SetTextSize(_mm(FUNC_LABEL_SIZE_MM, FUNC_LABEL_SIZE_MM))
+        txt.SetTextThickness(_pcbnew.FromMM(FUNC_LABEL_THICK_MM))
+        txt.SetPosition(_mm(x, y))
+        txt.SetHorizJustify(justify_map[justify_code])
+        _clamp_text_to_safe_area(txt, safe_area)
+
+    mk = None
+    mx, my = JP1_PIN1_MARKER_POS
+    for d in board.GetDrawings():
+        if (isinstance(d, _pcbnew.PCB_SHAPE) and d.GetLayer() == _pcbnew.F_SilkS
+                and d.GetShape() == _pcbnew.SHAPE_T_CIRCLE):
+            p = d.GetCenter()
+            if abs(_pcbnew.ToMM(p.x) - mx) < 1.0 and abs(_pcbnew.ToMM(p.y) - my) < 1.0:
+                mk = d
+                break
+    if mk is None:
+        mk = _pcbnew.PCB_SHAPE(board)
+        board.Add(mk)
+    mk.SetShape(_pcbnew.SHAPE_T_CIRCLE)
+    mk.SetFilled(True)
+    mk.SetLayer(_pcbnew.F_SilkS)
+    mk.SetWidth(_pcbnew.FromMM(0.05))
+    mk.SetCenter(_mm(mx, my))
+    mk.SetEnd(_mm(mx + JP1_PIN1_MARKER_RADIUS_MM, my))
+
+
 def _expand(bb: "pcbnew.BOX2I", mm: float) -> "pcbnew.BOX2I":
     b2 = pcbnew.BOX2I(bb.GetPosition(), bb.GetSize())
     b2.Inflate(pcbnew.FromMM(mm))
@@ -350,6 +600,48 @@ def place_refs(board) -> None:
     it, and re-running from the same footprint positions retraces the same
     search and lands on the same spot every time. MH1-4 (mounting holes,
     no functional need to label) get their reference silk hidden instead.
+
+    Task 16 fix: the search radius used to be the courtyard bbox's
+    circumscribed-circle radius (`hypot(halfW, halfH)`), applied uniformly
+    in every direction. That is correct for a square-ish part but badly
+    wrong for an oblong one -- e.g. J1B/J2B's 51.89x3.64mm courtyard has a
+    circumscribed radius of ~26mm (the corner-to-centre distance) even
+    though its own half-height is only 1.82mm, so a ray searching "north"
+    still stepped out a full ~26mm before the old code even started
+    looking for free space, landing the ref tens of mm away despite a spot
+    0.15mm off the row being free the whole time (confirmed: PICO/J1B/J2B
+    refs were 50+/26+/13+mm from their own part). Fixed by computing, per
+    search ray, the actual distance from the courtyard centre to *that
+    ray's* intersection with the (axis-aligned) courtyard rectangle --
+    short in the near-perpendicular directions, long only along the
+    diagonals, same as a human eyeballing "just outside this box" would
+    place it. If no direction/distance in the ladder is collision-free
+    (should not happen in practice -- see the report), the ref is hidden
+    (`SetVisible(False)`) rather than exiled across the board.
+
+    Task 16b fix: refs used to be processed in plain alphabetical order, so
+    in a genuinely crowded corridor (Rt2-Rt5/J1B, and the R_LED_PWR/
+    LED_PWR corner) whichever ref happened to sort first claimed the
+    nearest free spot even when it had many equally-good alternatives,
+    pushing a later, equally- or more-constrained ref further out once its
+    neighbours were already obstacles (6/52 refs ended up >3mm from their
+    own courtyard -- see task-16 report). The search itself is unchanged;
+    only the processing order changes, and only for that known corridor:
+    `_CROWDED_CLUSTER` (the Rt row + its two neighbouring clusters) is
+    placed first -- ordered worst-static-crowding-first via the same ray
+    search run against just the static board obstacles (pads + existing
+    silk, i.e. how tight this ref's neighbourhood is on its own, before
+    any ref text exists) -- so those refs get first claim on the corridor's
+    scarce room. Every other ref keeps its original alphabetical relative
+    order and runs after, unchanged.
+
+    A full global reorder (every ref by static-crowding score) was tried
+    first and rejected: it fixed the 6 flagged refs but, by reshuffling
+    *all* 52 refs' relative order, silently pushed an unrelated ref
+    (R_HDM_PD, in the host-cluster corner) from comfortably under 1mm to
+    3.86mm -- worse than any single offender it fixed. Scoping the reorder
+    to the one genuinely crowded corridor avoids touching placement order
+    anywhere else on the board.
     """
     import math
 
@@ -376,9 +668,35 @@ def place_refs(board) -> None:
     dirs = [(math.cos(math.radians(a)), math.sin(math.radians(a))) for a in range(0, 360, 15)]
     dists = [0.15, 0.4, 0.8, 1.3, 1.9, 2.6, 3.4, 4.3, 5.3]
 
-    placed_boxes = []
-    refs = sorted(fp.GetReference() for fp in board.GetFootprints() if not fp.GetReference().startswith("MH"))
-    for ref in refs:
+    def _search(txt, cx, ccy, half_w, half_h, obstacles):
+        """Unchanged ray search: try each angle/distance/direction rung in
+        order, return (bbox, dist_rung) of the first spot inside
+        `safe_area` that clears every obstacle in `obstacles`, or
+        (None, None) if the whole ladder is exhausted. Leaves `txt`
+        positioned at the returned (or last-tried) spot."""
+        for angle in (0, 90):
+            txt.SetTextAngle(_pcbnew.EDA_ANGLE(angle, _pcbnew.DEGREES_T))
+            for dist in dists:
+                for dx, dy in dirs:
+                    # Distance from the courtyard centre to this ray's own
+                    # rectangle-boundary crossing (not the fixed
+                    # circumscribed-circle radius -- see docstring).
+                    tx = half_w / abs(dx) if abs(dx) > 1e-9 else math.inf
+                    ty = half_h / abs(dy) if abs(dy) > 1e-9 else math.inf
+                    edge = min(tx, ty)
+                    r = edge + dist
+                    txt.SetPosition(_mm(cx + dx * r, ccy + dy * r))
+                    bb = txt.GetBoundingBox()
+                    if not safe_area.Contains(bb):
+                        continue
+                    if any(bb.Intersects(o) for o in obstacles):
+                        continue
+                    return bb, dist
+        return None, None
+
+    refs0 = sorted(fp.GetReference() for fp in board.GetFootprints() if not fp.GetReference().startswith("MH"))
+
+    def _courtyard_geom(ref):
         fp = board.FindFootprintByReference(ref)
         txt = fp.Reference()
         txt.SetTextSize(_mm(REF_SIZE_MM, REF_SIZE_MM))
@@ -387,28 +705,39 @@ def place_refs(board) -> None:
         cy = fp.GetCourtyard(_pcbnew.F_CrtYd).BBox()
         cx = _pcbnew.ToMM((cy.GetLeft() + cy.GetRight()) // 2)
         ccy = _pcbnew.ToMM((cy.GetTop() + cy.GetBottom()) // 2)
-        diag = math.hypot(_pcbnew.ToMM(cy.GetWidth()) / 2.0, _pcbnew.ToMM(cy.GetHeight()) / 2.0)
+        half_w = _pcbnew.ToMM(cy.GetWidth()) / 2.0
+        half_h = _pcbnew.ToMM(cy.GetHeight()) / 2.0
+        return fp, txt, cx, ccy, half_w, half_h
 
-        found = False
-        bb = None
-        for angle in (0, 90):
-            txt.SetTextAngle(_pcbnew.EDA_ANGLE(angle, _pcbnew.DEGREES_T))
-            for dist in dists:
-                for dx, dy in dirs:
-                    txt.SetPosition(_mm(cx + dx * (diag + dist), ccy + dy * (diag + dist)))
-                    bb = txt.GetBoundingBox()
-                    if not safe_area.Contains(bb):
-                        continue
-                    if any(bb.Intersects(o) for o in pad_obstacles + silk_obstacles + placed_boxes):
-                        continue
-                    found = True
-                    break
-                if found:
-                    break
-            if found:
-                break
-        assert found, f"place_refs: no collision-free spot found for {ref!r}"
-        placed_boxes.append(_expand(bb, REF_SILK_CLEARANCE_MM))
+    # Crowding pre-pass (Task 16b, scoped to the known-crowded corridor --
+    # see docstring): rank _CROWDED_CLUSTER by static-obstacles-only score,
+    # worst first, and place that cluster ahead of everyone else. Every
+    # other ref keeps its original alphabetical order, unchanged.
+    static_obstacles = pad_obstacles + silk_obstacles
+    scores: dict[str, float] = {}
+    for ref in _CROWDED_CLUSTER:
+        _, txt, cx, ccy, half_w, half_h = _courtyard_geom(ref)
+        _, dist = _search(txt, cx, ccy, half_w, half_h, static_obstacles)
+        scores[ref] = dist if dist is not None else math.inf
+    priority = sorted((r for r in refs0 if r in scores), key=lambda r: (-scores[r], r))
+    refs = priority + [r for r in refs0 if r not in scores]
+
+    placed_boxes = []
+    relocated = []
+    omitted = []
+    for ref in refs:
+        fp, txt, cx, ccy, half_w, half_h = _courtyard_geom(ref)
+        bb, _dist = _search(txt, cx, ccy, half_w, half_h, static_obstacles + placed_boxes)
+
+        if bb is not None:
+            placed_boxes.append(_expand(bb, REF_SILK_CLEARANCE_MM))
+            relocated.append(ref)
+        else:
+            txt.SetVisible(False)
+            omitted.append(ref)
 
     for ref in ["MH1", "MH2", "MH3", "MH4"]:
         board.FindFootprintByReference(ref).Reference().SetVisible(False)
+
+    print(f"place_refs: relocated={len(relocated)} omitted={omitted}")
+    return relocated, omitted

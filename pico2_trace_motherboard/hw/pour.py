@@ -136,6 +136,10 @@ def _add_gnd_zone(board, layer):
 _SOLID_OVERRIDE_PADS = [
     ("PICO", "13"), ("J1B", "13"), ("PICO", "28"), ("JP2", "2"),
     ("J1B", "3"), ("J1B", "8"),
+    # Task 18: D_VSYS's new VBUS_SEL leg crosses J2B's row through the
+    # pad37/pad38 half-pitch gap, right next to J2B.18 -- DRC-confirmed
+    # `starved_thermal` (down to 1 spoke) under normal thermal relief.
+    ("J2B", "18"),
 ]
 
 
@@ -160,17 +164,46 @@ _GND_STUBS = [
     ("F.Cu", (45.395, 15.6), (45.395, 23.11), 0.2),
     # PICO.23 <-> PICO.18: same column, extends the link across row1.
     ("F.Cu", (45.395, 23.11), (45.395, 40.89), 0.2),
-    # U_ISNS.2 <-> open F_Cu east of its 0.95mm-pitch column.
-    ("F.Cu", (63.462, 34.6), (65.25, 34.65), 0.2),
+    # U_ISNS.2 <-> open F_Cu east of its 0.95mm-pitch column. Task 16:
+    # endpoint nudged +0.25mm east (65.25->65.50) together with its via --
+    # see the via-position comment below for why "east" (not the brief's
+    # "west") is the direction with real DRC margin.
+    ("F.Cu", (63.462, 34.6), (65.50, 34.65), 0.2),
     # J3.9 (MIPI-20, 1.27mm pitch) <-> a via placed essentially in-pad --
-    # the only spot standard board-minimum via clearance (0.5mm dia)
-    # allows this close to the connector's own tight pitch.
+    # the only spot close to the connector's own tight pitch; same-net as
+    # the pad it lands in, so pad clearance doesn't apply (Task 16: grown
+    # to the board's standard 0.6mm/0.3mm size, DRC-clean up to >=1.2mm).
     ("F.Cu", (14.255, 61.15), (14.3, 61.2), 0.2),
     # PICO.3/J1B.3's own local F_Cu+B_Cu pocket (bbox inside the trace
     # corridor) isn't reached by the wider pour -- escapes north, just
     # outside the corridor bbox (y<40.89), to a legal via spot instead
     # of stitching the corridor interior.
     ("F.Cu", (7.295, 40.89), (7.295, 39.5), 0.2),
+    # Task 18: bridges the B.Cu orphan pair (F.17/B.16, see
+    # _STITCH_VIAS_FRAGMENT_FIX's (52.28,32.0)... (45.39,32.0) comment --
+    # that via unions F.17<->B.16 but neither reaches the main GND network
+    # on its own) to B.15/the main plane. A proper union-find over ALL
+    # GND copper (vias union F<->B; GND tracks union same-layer; THT/
+    # plated PADS union everything they touch, bridging layers too) found
+    # this as the remaining gap -- "every island has a via" is NOT the
+    # same test; an island can have a via and still be isolated if that
+    # via's other-layer landing spot is itself isolated. See
+    # task-18-report.md's "Correct future check" section.
+    #
+    # Direct paths all failed DRC clearance (checked programmatically,
+    # not by eye, against every non-GND track/via/pad on the crossed
+    # layer): BTN_USER's F.Cu track at y=13.8 (x 46.665-66.0) blocks from
+    # the north; J2B.1/NATIVE_VBUS_DET's own pad+F.Cu column at
+    # (50.475,15.6)/x=50.475 blocks a straight crossing; NATIVE_VBUS_DET's
+    # F.Cu vertical (50.475, y 15.6-23.11) blocks a same-Y jog further
+    # south. This 3-segment path threads the one surviving window: south
+    # of BTN_USER's clearance (>=14.2) but north of J2B.1's clearance
+    # (<=14.45) for the westward leg, then straight south through J2B's
+    # own pad1/pad2 half-pitch gap column (x=49.205, clear of
+    # NATIVE_VBUS_DET which is a different X) into B.15's own territory.
+    ("F.Cu", (52.0, 15.0), (52.0, 14.3), 0.2),
+    ("F.Cu", (52.0, 14.3), (49.205, 14.3), 0.2),
+    ("F.Cu", (49.205, 14.3), (49.205, 16.9), 0.2),
 ]
 
 _LAYER_MAP = {"F.Cu": pcbnew.F_Cu, "B.Cu": pcbnew.B_Cu}
@@ -210,6 +243,39 @@ _STITCH_VIAS_FRAGMENT_FIX = [
     (19.995, 19.434), (45.545, 41.878), (44.925, 16.787),
     (63.3, 12.032), (10.332, 59.696), (51.617, 60.296), (79.751, 46.451),
     (73.401, 44.7), (23.805, 19.434), (18.935, 23.408), (26.345, 51.901),
+    # Task 18: genuine orphan island inside the former "Antenna Copper
+    # Keep Out" region (x 43.3-52.3, y 24.9-39.1, neutered in Task 14h) --
+    # a ~1.32mm-wide x ~15.6mm-tall F.Cu GND sliver along PICO's own GND
+    # column (pin18/pin23 share x=45.395) with no via or GND pad anywhere
+    # in it, DRC-caught as `unconnected_items` (reported at the board's
+    # unrelated top-left corner outline vertex -- KiCad anchors that
+    # message at the zone's first outline point, not the fault location;
+    # found instead by cross-referencing every F.Cu GND fill island's
+    # bbox against every GND via/pad position). Probed the island's own
+    # width profile before choosing this point: uniform 1.320mm for
+    # nearly its whole length (y~25.2-39.2), narrowing to 0.980mm only
+    # right at the top (near PICO.23's own clearance arc) -- (45.39,32.0)
+    # sits mid-run at the uniform width, giving the standard 0.6mm via
+    # (needs 1.0mm channel: 0.3 radius + 0.2 clearance each side) 0.16mm
+    # clearance margin on each side. Grounds copper directly beneath the
+    # seated Pico module -- a genuine reference-plane improvement, not
+    # just a DRC fix.
+    (45.39, 32.0),
+    # Task 18, second orphan: per-island "has an anchor" isn't sufficient
+    # -- connectivity is a graph over ALL GND copper (vias union F.Cu<->
+    # B.Cu; GND tracks union same-layer islands; THT/plated PADS union
+    # every island they touch, bridging layers too -- omitting pads
+    # over-fragments the graph). A proper union-find (ring-sampled at
+    # anchor radius + ~0.45mm, since a bare point-in-polygon test at a
+    # pad/via CENTRE false-negatives on the thermal-gap/drill hole there)
+    # found a second real orphan near J_STEMMA/J_UART/R_NVD/C_P3V3_2
+    # (bbox x~48.76-55.70 y~9.03-11.51, ~10.6mm^2) -- exposed by Task 18's
+    # own C_P3V3_2 placement reshaping the pour in that corner. Widest
+    # horizontal run measured ~6.80mm at this point, enormous margin over
+    # the 1.0mm a 0.6mm via needs. Island indices renumber on every
+    # refill (do not hardcode "outline N" -- verify by union-find, not
+    # index).
+    (52.28, 10.43),
 ]
 
 _STITCH_VIAS_SPREAD = [
@@ -226,22 +292,42 @@ _STITCH_VIAS_SPREAD = [
     (86.0, 6.0), (86.0, 14.0), (86.0, 22.0), (86.0, 30.0), (86.0, 38.0), (86.0, 54.0),
 ]
 
-# Pad-escape vias for three of the `_GND_STUBS` above (U_INA219_ALT.3/.7,
-# PICO.3/J1B.3's corridor-adjacent pocket) -- standard 0.6mm size, just
-# not part of the ring/fragment-fix/spread groups since they exist to
-# land a stub track, not to stitch a fragment.
-_STITCH_VIAS_PAD_ESCAPE = [(61.6, 27.975), (61.3, 28.625), (7.295, 39.5)]
+# Pad-escape vias for five of the `_GND_STUBS` above (U_INA219_ALT.3/.7,
+# PICO.3/J1B.3's corridor-adjacent pocket, J3.9, U_ISNS.2) -- standard
+# 0.6mm size, just not part of the ring/fragment-fix/spread groups since
+# they exist to land a stub track, not to stitch a fragment.
+#
+# J3.9 (14.3, 61.2) and U_ISNS.2 were originally undersized at the board's
+# 0.5mm/0.3mm DRC-floor size (Task 15) -- the only two vias on the board
+# below the standard 0.6mm/0.3mm size, both with < 0.15mm annular ring.
+# Task 16 grew both to the standard 0.6mm/0.3mm size:
+#   - J3.9: enlarged in place (14.3, 61.2 unchanged) -- DRC-clean at this
+#     spot up to >=1.2mm dia (same-net-as-pad, so pad clearance doesn't
+#     apply; nearest other-net copper is J3.11's pad, ~0.855mm away).
+#   - U_ISNS.2: enlarging in place at 65.25 passes DRC at *exactly* 0.600mm
+#     with zero margin (fails at 0.605mm) against the HOST_VBUS 0.5mm B_Cu
+#     track running x=64.500 y=[28.72,37.25] immediately to its west. DRC
+#     measurement (not the west-nudge originally suggested, which collides:
+#     the track's east edge is 64.75, only 0.25mm from the via's un-grown
+#     centre, so moving toward it shortens the gap and produces a
+#     `shorting_items` violation at 0.6mm) shows the real margin lies
+#     *east*: nudging the via to (65.50, 34.65) -- +0.25mm away from
+#     HOST_VBUS, toward the open gap before U_ISNS's own pads 4/5 at
+#     x=65.7375 -- keeps DRC clean up to 0.8mm dia (0.9mm is where pad 4,
+#     HOST_5V_IN, becomes the binding constraint instead), i.e. the 0.6mm
+#     target now has real margin on both sides. Its `_GND_STUBS` escape
+#     track was moved to the same new endpoint.
+_STITCH_VIAS_PAD_ESCAPE = [
+    (61.6, 27.975), (61.3, 28.625), (7.295, 39.5), (14.3, 61.2), (65.50, 34.65),
+    # Task 18: the two transition vias for the B.16<->B.15 bridge stub
+    # above (F.Cu<->B.Cu at each end) -- clearance verified
+    # programmatically against every non-GND track/via/pad on both
+    # layers before placing (task-18-report.md).
+    (52.0, 15.0), (49.205, 16.9),
+]
 
 _STITCH_VIA_DIA_MM = 0.6
 _STITCH_VIA_DRILL_MM = 0.3
-
-# Pad-escape vias paired with two of the `_GND_STUBS` above, sized to the
-# board's DRC-enforced minimum (0.5mm dia / 0.3mm drill) -- the standard
-# 0.6mm via does not clear the tight copper around U_ISNS.2 / J3.9 even
-# from their own stub tracks' landing points.
-_STITCH_VIAS_MIN_SIZE = [(14.3, 61.2), (65.25, 34.65)]
-_MIN_VIA_DIA_MM = 0.5
-_MIN_VIA_DRILL_MM = 0.3
 
 
 def _has_gnd_via(board, gnd_netcode, x, y, tol=0.01):
@@ -273,16 +359,48 @@ def _add_stitching_vias(board):
         if _has_gnd_via(board, nc, x, y):
             continue
         _add_via_at(board, ni, x, y, _STITCH_VIA_DIA_MM, _STITCH_VIA_DRILL_MM)
-    for x, y in _STITCH_VIAS_MIN_SIZE:
-        if _has_gnd_via(board, nc, x, y):
-            continue
-        _add_via_at(board, ni, x, y, _MIN_VIA_DIA_MM, _MIN_VIA_DRILL_MM)
+
+
+# Task 16 migration: on the pre-Task-16 board file, J3.9's and U_ISNS.2's
+# vias (and U_ISNS.2's connecting stub track) already exist at their old
+# Task-15 spec (0.5mm/0.3mm; U_ISNS.2 at x=65.25). Mutates those existing
+# objects in place (never Remove/Add -- see PLAN.md's "Verified environment
+# facts") to the new spec above. On a board that doesn't have them yet
+# (a genuine from-scratch build), each inner loop simply finds nothing and
+# no-ops -- `_add_gnd_stubs`/`_add_stitching_vias` then create the new
+# geometry directly from the already-updated `_GND_STUBS`/
+# `_STITCH_VIAS_PAD_ESCAPE` tables. Either path converges on the same
+# final state.
+_LEGACY_MIN_VIAS_MIGRATION = [
+    # (old_x, old_y, new_x, new_y) -- J3.9 unchanged, U_ISNS.2 nudged east.
+    (14.3, 61.2, 14.3, 61.2),
+    (65.25, 34.65, 65.50, 34.65),
+]
+
+
+def _fix_legacy_min_vias(board):
+    ni = _net(board, "GND")
+    nc = ni.GetNetCode()
+    for old_x, old_y, new_x, new_y in _LEGACY_MIN_VIAS_MIGRATION:
+        for t in board.GetTracks():
+            if isinstance(t, pcbnew.PCB_VIA) and t.GetNetCode() == nc:
+                p = t.GetPosition()
+                if abs(pcbnew.ToMM(p.x) - old_x) < 0.01 and abs(pcbnew.ToMM(p.y) - old_y) < 0.01:
+                    t.SetPosition(_mm(new_x, new_y))
+                    t.SetWidth(pcbnew.F_Cu, pcbnew.FromMM(_STITCH_VIA_DIA_MM))
+                    t.SetDrill(pcbnew.FromMM(_STITCH_VIA_DRILL_MM))
+            elif isinstance(t, pcbnew.PCB_TRACK) and t.GetNetCode() == nc:
+                e = t.GetEnd()
+                ex, ey = pcbnew.ToMM(e.x), pcbnew.ToMM(e.y)
+                if abs(ex - old_x) < 0.01 and abs(ey - old_y) < 0.01:
+                    t.SetEnd(_mm(new_x, new_y))
 
 
 def add_pour(board):
     _add_gnd_zone(board, pcbnew.B_Cu)
     _add_gnd_zone(board, pcbnew.F_Cu)
     _apply_solid_overrides(board)
+    _fix_legacy_min_vias(board)
     _add_gnd_stubs(board)
     _add_stitching_vias(board)
 
