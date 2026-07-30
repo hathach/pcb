@@ -181,7 +181,32 @@ POS: dict[str, tuple[float, float, float]] = {
     # extent reproduced exactly -- see module docstring).
     "JP1": (9.96, 10.655, 90),
     "JP4": (19.73, 10.655, 90),
-    "J8": (29.4, 3.9, 180),
+    # J8 (Type-C swap, 2026-07-30): usb_c_pwr's F.Fab front lip is at local
+    # +4.15 (vs the old micro-B's +3.85), so the anchor moves 3.9 -> 4.15 to
+    # keep the mating face flush at the top edge (y ~= 0), same convention
+    # as before. Probed pad rows after the move (rot 180 => board = anchor -
+    # local): VBUS pair pads "1" at x 26.95/31.85, CC1 "2" at 30.65, CC2 "3"
+    # at 27.65, GND "4" at 26.15/32.65, all y=8.195; NPTH pegs (26.51/32.29,
+    # 6.75); shield PTH pairs (25.08/33.72, y 3.10 and 7.28). Courtyard spans
+    # x 24.08-34.72, y 0-9.42 -- clear of JP4 pin 2's pad (22.27, 10.655) and
+    # of C_P3V3_1's courtyard (x 27.26-28.74, y 10.6-11.4).
+    "J8": (29.4, 4.15, 180),
+    # R_CC1/R_CC2 (J8 Type-C Rd pull-downs): in the open pocket WEST of
+    # J8's courtyard (west edge 24.08). South of the connector is walled
+    # off: NVD_TOP is an F_Cu track at y=9.51 spanning x 22.27-52.9, and
+    # the 0.49mm gap between J8's pad-row bottom (8.92) and that track
+    # can't fit a 0.2mm route at 0.2mm clearance -- DRC-proven on the
+    # first attempt, which parked these south of J8 and shorted/crossed
+    # NVD_TOP. Their CC stubs instead exit the pad row NORTHWARD and run
+    # west under the connector body (hw/route_trace, lanes y=5.25/5.7).
+    # R_CC1 takes the WEST slot: its lane (5.25) is the north one, so its
+    # final drop (x=21.3) must lie west of where R_CC2's south lane ends
+    # (22.6) or the two would cross -- worked out with the lane geometry
+    # in hw/route_trace. Rotation 270 puts pad "1" on the north end
+    # (probed), facing those stubs; pad "2" (GND, south) is fed by the
+    # F_Cu pour. Clear of JP4's pads (x>=21.42 start at y 9.805) by >2mm.
+    "R_CC1": (21.3, 6.9, 270),
+    "R_CC2": (22.6, 6.9, 270),
     "LED_PWR": (4.0, 9.6, 270),
     "R_LED_PWR": (4.0, 12.1, 90),
 
@@ -458,7 +483,11 @@ FUNC_LABELS: list[tuple[str, float, float, int]] = [
     ("VBUS DET", 21.0, 8.55, 0),
     # Connectors.
     ("USB HOST", 80.0, 11.6, 0),    # J5
-    ("5V IN", 29.4, 7.0, 0),        # J8
+    # "5V IN" moved off J8's body (Type-C courtyard now reaches y=9.42 and
+    # its pad row sits at y=8.195 where the label used to be) to the open
+    # silk band west of R_CC2's courtyard (which starts at x~20.9), one
+    # row above "VBUS DET" (18.1-23.9, y 7.95-9.15).
+    ("5V IN", 16.3, 6.3, 0),        # J8 (west of the Type-C body + R_CCs)
     ("USB DEV", 88.86, 39.5, 0),    # J9
     ("ETM TRACE", 14.89, 54.3, 0),  # J3
     ("SWD", 52.4, 54.3, 0),         # J6

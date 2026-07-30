@@ -253,3 +253,16 @@ the as-built source of truth for behavior, and `docs/BOM.csv`/
   `C_HSW_IN` (load-switch input bypass). See `docs/BRINGUP.md`
   "As-built additions" for placement and the two GND-pour-island fixes
   they required.
+- **§4 `J8` (2026-07-30, at order time)**: the power-only micro-B was
+  replaced by a **USB Type-C receptacle** (HRO TYPE-C-31-M-12 land,
+  LCSC C165948, JLC Basic) with **`R_CC1`/`R_CC2`** 5.1 kΩ CC
+  pull-downs added (a compliant Type-C source presents no VBUS without
+  Rd). Same electrical role (5 V into `VBUS_NET`), same flush-lip
+  position on the top edge. One deliberate quirk: the connector's
+  second VBUS pad column (pins A9/B4) is **board-NC** — the footprint's
+  NPTH alignment peg geometrically blocks every legal escape from that
+  column, and the mating plug parallels all four VBUS beams anyway, so
+  the fed A4/B9 column (2 × 1.25 A contacts) carries the input with
+  full margin. Board regenerated from scratch by the `hw/` pipeline
+  (proven byte-equivalent first); DRC/ERC/netlist-parity/pour gates all
+  green.

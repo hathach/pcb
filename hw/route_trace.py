@@ -2019,32 +2019,72 @@ def _route_final_long_runs(board):
     # VBUS_NET: JP4.1 (19.73,10.655) -> JP1.3 (15.04,10.655, already wired
     # north to the PICO/J2B chain) -- a direct horizontal at their shared
     # Y, clear of NVD_TOP's own vertical (22.27,9.51-10.655, east of
-    # both). Then JP4.1 -> J8.1 (30.7,5.36, SMD -- F_Cu only, unlike
-    # every THT connector elsewhere in this file, so needs a via for the
-    # B_Cu approach): loops north of NVD_TOP's own horizontal (22.27-
-    # 52.9,y=9.51) at y=7.5 (clear of its vertical too, which stops at
-    # 10.655) before dropping into J8.1 from the west, comfortably north
-    # of J8's other pads (all at y<=5.36 further east).
+    # both). Then JP4.1 -> J8's VBUS pad group (SMD, F_Cu only, so the
+    # B_Cu approach needs a via) -- geometry in the Type-C comment below.
     w_net, via_dia_net, via_drill_net = power_via("VBUS_NET")
     ni_net = _net(board, "VBUS_NET")
     jp4_1 = _pos(_pad(board, "JP4", "1"))
     jp1_3 = _pos(_pad(board, "JP1", "3"))
-    j8_1 = _pos(_pad(board, "J8", "1"))
     _add_path_once(board, ni_net, pcbnew.B_Cu, [jp4_1, jp1_3], w_net)
-    if not _track_exists(board, ni_net.GetNetCode(), pcbnew.B_Cu, _mm(*jp4_1), _mm(jp4_1[0], 7.5)):
-        # Straight drop at J8.1's own x (30.7) grazes J8.2 (30.05,5.36,
-        # 0.65mm away, DRC-confirmed short of the 0.2mm floor at Power
-        # width); shifting the whole column east instead walks into J8's
-        # OWN ground-shield pad (a scattered multi-region GND pad, one
-        # region right at 31.8875,5.36, only 0.9mm from J8.2 with almost
-        # no room for a 0.5mm-wide track between them). The fix is to
-        # neck just the final vertical drop to Default width (0.2mm) --
-        # halved clearance need fits the 0.3mm window between J8.2's
-        # right edge and the shield's left edge, both centered on J8.1's
-        # own column.
-        _add_track(board, ni_net, pcbnew.B_Cu, [jp4_1, (jp4_1[0], 7.5), (j8_1[0], 7.5)], w_net)
-        _add_via(board, ni_net, (j8_1[0], 7.5), via_dia_net, via_drill_net)
-        _add_track(board, ni_net, pcbnew.F_Cu, [(j8_1[0], 7.5), j8_1], w_default)
+    # J8 is the Type-C usb_c_pwr footprint (2026-07-30 swap; the micro-B
+    # geometry this block used to dodge -- J8.2 at 30.05, the scattered
+    # shield pad -- is gone). Pad "1" is a 4-pad VBUS group: two stacked
+    # pads per column at x 26.95 / 31.85, y 8.195. Route into the EAST
+    # column: both columns sit 0.44mm from an NPTH alignment peg
+    # (26.51/32.29, 6.75; hole r 0.325, hole-to-copper 0.25), which kills
+    # any drop that shares the peg's x-side -- the east column's peg sits
+    # EAST of it, so a drop offset 0.25mm WEST of the pad centre (x 31.60,
+    # 0.2mm Default width, span 31.5-31.7) clears the peg by 0.265mm
+    # radial while staying on pad copper (pad spans 31.55-32.15).
+    # Approach corridor: B_Cu y=5.0 under the connector body, between the
+    # front shield PTH row (y<=3.9) and the back shield PTH row (y>=6.23),
+    # 0.85/0.98mm clear of each at Power width; the old y=7.5 corridor is
+    # now covered by J8's own pad row (y 7.47-8.92).
+    fp_j8 = board.FindFootprintByReference("J8")
+    vbus_cols = sorted({_pos(p) for p in fp_j8.Pads() if p.GetNumber() == "1"})
+    j8_vbus = vbus_cols[-1]                     # east column (31.85, 8.195)
+    drop_x = j8_vbus[0] - 0.25                  # 31.60 -- see NPTH note above
+    if not _track_exists(board, ni_net.GetNetCode(), pcbnew.B_Cu, _mm(*jp4_1), _mm(jp4_1[0], 5.0)):
+        _add_track(board, ni_net, pcbnew.B_Cu, [jp4_1, (jp4_1[0], 5.0), (drop_x, 5.0)], w_net)
+        _add_via(board, ni_net, (drop_x, 5.0), via_dia_net, via_drill_net)
+        _add_track(board, ni_net, pcbnew.F_Cu,
+                   [(drop_x, 5.0), (drop_x, j8_vbus[1] + 0.2)], w_default)
+
+    # J8_CC1/J8_CC2 (Type-C Rd pull-downs): F_Cu stubs from J8's CC pads
+    # ("2" at 30.65, "3" at 27.65, both y=8.195) to R_CC1/R_CC2 pad "1"
+    # west of the connector (21.3/22.6, 6.39; GND pad "2" is fed by the
+    # F_Cu pour). South is walled by NVD_TOP (F_Cu, y=9.51) with no legal
+    # gap under the pad row, so each stub exits its pad NORTH through the
+    # 0.5mm-pitch row gaps (0.3mm-wide neighbors, 0.25mm gap each side at
+    # 0.2mm width), then runs west UNDER the connector body. Lane
+    # assignment is crossing-free by construction (DRC caught the first
+    # attempt, whose east pad took the south lane and crossed the west
+    # pad's vertical):
+    #   - CC1 (east pad, 30.65) -> NORTH lane y=5.25, ending at the WEST
+    #     resistor (21.3): its vertical (8.195->5.25) crosses y=5.7 at
+    #     x=30.65, east of where CC2's lane starts (27.65); its final
+    #     drop (21.3) is west of where CC2's lane ends (22.6).
+    #   - CC2 (west pad, 27.65) -> SOUTH lane y=5.7, ending at the EAST
+    #     resistor (22.6): its vertical stops at 5.7, never reaching
+    #     CC1's lane; its drop (5.7->6.39) never reaches y=5.25.
+    #   Lane separation 0.45 >= 0.4 (0.2 clearance + 2x0.1 half-widths).
+    #   Clearances: north lane 1.35mm above the front-shield row top
+    #   (3.9), 1.08mm radial off the NPTH peg (26.51,6.75); south lane
+    #   0.43mm south of the back shield PTH pads (y>=6.23), 0.63mm off
+    #   the peg hole edge.
+    for cc_net, res_ref, cc_padnum, lane_y in (
+        ("J8_CC1", "R_CC1", "2", 5.25),
+        ("J8_CC2", "R_CC2", "3", 5.7),
+    ):
+        ni_cc = _net(board, cc_net)
+        cc = _pos(_pad(board, "J8", cc_padnum))
+        r1 = _pos(_pad(board, res_ref, "1"))
+        r2 = _pos(_pad(board, res_ref, "2"))
+        # pad "1" must be the north (stub-facing) end or the drop into it
+        # would cross the GND pad -- place.py sets rotation 270 for this.
+        assert r1[1] < r2[1], f"{res_ref} pad1 not on the north end (rot?)"
+        path = [cc, (cc[0], lane_y), (r1[0], lane_y), r1]
+        _add_path_once(board, ni_cc, pcbnew.F_Cu, path, w_default)
 
     # VBUS_NET: D_J9_BUSPWR.2 (76.05,50.5, SMD -- F_Cu only) back to the
     # JP1.3 cluster, a long run around P3V3's own sprawling B_Cu tree

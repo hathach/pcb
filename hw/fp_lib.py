@@ -44,6 +44,14 @@ FP = {
     "jst_sh4": ("Connector_JST", "JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal"),
     "usb_a": ("Connector_USB", "USB_A_Receptacle_GCT_USB1046"),
     "usb_microb": ("Connector_USB", "USB_Micro-B_Molex_47346-0001"),
+    # usb_c_pwr (J8 micro-B -> Type-C swap, 2026-07-30 order session): local
+    # copy of stock USB_C_Receptacle_HRO_TYPE-C-31-M-12 (the land pattern of
+    # LCSC C165948, JLC Basic) with pads *renumbered* so gen_sch.py's
+    # numeric-pad invariant holds: 1=VBUS (A4/B9/A9/B4), 2=CC1 (A5),
+    # 3=CC2 (B5), 4=GND (A1/B12/A12/B1), 5=NC data/SBU (A6/A7/A8/B6/B7/B8),
+    # 6=shield (4x PTH legs) -- same multi-pad-per-number convention as
+    # usb_microb's own shield pad "6".
+    "usb_c_pwr": ("pico2_trace", "USB_C_PWR_HRO_TYPE-C-31-M-12"),
     "hdr_1x03": ("Connector_PinHeader_2.54mm", "PinHeader_1x03_P2.54mm_Vertical"),
     "hdr_1x02": ("Connector_PinHeader_2.54mm", "PinHeader_1x02_P2.54mm_Vertical"),
     "hdr_1x06": ("Connector_PinHeader_2.54mm", "PinHeader_1x06_P2.54mm_Vertical"),
