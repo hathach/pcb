@@ -65,6 +65,13 @@ class Part:
             return pin
         return self.padmap.get(pin, pin)
 
+    def pad_nets(self) -> list[tuple[str, str]]:
+        """(footprint pad number, net name) for every connected pin -- the
+        same pin-name -> pad-number translation `emit_netlist` applies via
+        `pad_number`, factored here so `build_board.py` uses the identical
+        rule (nc'd / unassigned pins are omitted)."""
+        return [(self.pad_number(pin), net) for pin, net in self.pins.items() if net is not None]
+
 
 def _pins(*names: str) -> dict[str, str | None]:
     return {n: None for n in names}
