@@ -10,7 +10,10 @@ the handoff brief, `tools/`); **each board is its own independent nested
 git repo** (`pico2_trace_motherboard/.git`) listed in `.gitignore` — never
 `git add` a board directory into the umbrella, and run board commits inside
 the board directory. Read `README.md` for the inventory, and the board's
-own docs before touching anything.
+own docs before touching anything. Before any pcbnew scripting read
+`docs/kicad-pcbnew-facts.md`; to start a new board read `docs/pipeline.md`;
+parts sourcing starts at `docs/parts-palette.md`; shared audited footprints
+live in `lib/pcb.pretty/`.
 
 ## Ground rules
 
@@ -22,7 +25,7 @@ own docs before touching anything.
   Calibre library at `~/Documents/calibre-library` — check there before
   asserting pinouts, register facts, or connector pinouts from memory.
 - **Markdown tables:** always align columns in the raw source
-  (`pico2_trace_motherboard/tools/align_md_tables.py`).
+  (`tools/align_md_tables.py`).
 - **Fab costs real money:** before any order, run an adversarial multi-agent
   review of footprints, live-board wiring, and the fab package (the
   2026-07-30 pre-order audit in pico2_trace_motherboard is the template),

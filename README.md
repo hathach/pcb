@@ -1,28 +1,25 @@
 # pcb — PCB projects home
 
-Each board is a self-contained git repo in its own directory. This tree is
-the reference base for future boards.
+Each board is a self-contained git repo in its own directory (gitignored
+here); this umbrella repo versions the shared knowledge, footprints, and
+tooling that future boards reuse.
 
-| Entry                        | What                                                                     |
-| ---------------------------- | ------------------------------------------------------------------------ |
-| `pico2_trace_motherboard/`   | Pico 2 SWD+ETM trace carrier + TinyUSB dev/test bench (RP2350, 2-layer). First board ordered from this tree: JLCPCB **W2026073018593887**, 2026-07-30, 5 PCB / 2 assembled, $81.27. |
-| `PICO2_TRACE_PCB_HANDOFF.md` | The origin brief for that board (fly-wire rig measurements, requirements). |
-| `tools/jlc-cdp/`             | Chrome-DevTools driver + JLCPCB wizard playbook used to place the order.  |
+## Layout
 
-## What to reuse from pico2_trace_motherboard
+| Entry                             | What                                                                                                                                                               |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pico2_trace_motherboard/`        | Board #1: Pico 2 SWD+ETM trace carrier + TinyUSB dev/test bench (RP2350, 2-layer). Ordered: JLCPCB **W2026073018593887**, 2026-07-30, 5 PCB / 2 assembled, $81.27. |
+| `docs/pipeline.md`                | The netlist-driven KiCad pipeline + gate battery + how to bootstrap board #2.                                                                                      |
+| `docs/kicad-pcbnew-facts.md`      | Verified KiCad 9 scripting landmines (pcbnew API, kicad-cli, footprints).                                                                                          |
+| `docs/parts-palette.md`           | LCSC/JLC-verified parts with tiers + JLC fee behavior.                                                                                                             |
+| `docs/PICO2_TRACE_PCB_HANDOFF.md` | Origin brief for board #1 (fly-wire measurements, requirements).                                                                                                   |
+| `lib/pcb.pretty/`                 | Audited shared footprints: USB-C C165948 lands (power-only + USB2-device renumbers), FTSH-110/105 1.27mm headers. Copy into each board's local `.pretty`.          |
+| `tools/jlc-cdp/`                  | Chrome-DevTools JLCPCB ordering driver + wizard-trap playbook.                                                                                                     |
+| `tools/board_semantic_compare.py` | Prove two `.kicad_pcb` are geometrically identical (regen gate).                                                                                                   |
+| `tools/align_md_tables.py`        | Markdown table column aligner (house style).                                                                                                                       |
 
-- **Netlist-driven KiCad flow** (`hw/`): parts+nets as Python single source
-  of truth → pcbnew scripting for board build, placement, routing, pour →
-  `kicad-cli` DRC/ERC gates. The board file is fully regenerable from an
-  empty file (proven byte-equivalent). See `PLAN.md` "Verified environment
-  facts" for the pcbnew API landmines (ZONE_FILLER segfault, BOARD.Remove
-  corruption, netclass persistence, ...).
-- **Gate battery**: parsed-JSON DRC (never exit codes), model↔schematic
-  netlist parity, GND-pour union-find (ring-sampled, 3 edge classes),
-  pytest checks with net-level regression guards.
-- **Ordering playbook**: `docs/ORDERING.md` (JLC specifics: Economic PCBA
-  constraints, Extended-fee behavior, part-decision tables) and
-  `tools/jlc-cdp/README.md` (wizard automation traps).
-- **Custom Type-C footprints** (`pico2_trace.pretty/USB_C_{PWR,DEV}_HRO…`):
-  renumbered HRO TYPE-C-31-M-12 lands (LCSC C165948) for power-only and
-  USB2-device ports, three-reviewer audited.
+## Starting a new board
+
+Read `docs/pipeline.md` — short version: copy `pico2_trace_motherboard/hw/`
+wholesale, gut the board-specific tables, keep every helper and gate, seed
+footprints from `lib/pcb.pretty/`, and regenerate-never-hand-nudge.
