@@ -1,13 +1,13 @@
 Pico 2 SWD+ETM Trace Motherboard — fabrication output manifest
 ================================================================
 
-Source board revision : 6d67559 (6d6755925cff3d3999a5ba2291550563aaa05c66)
-                         "pcb: fix diode direction, ground J5 shell, add
-                         VSYS feed + decoupling, widen V5_JTRACE"
+Source board revision : 5bdcdeb (5bdcdebbd56204dcb7892aab6e367b899242c6f0)
+                         "pcb: J8 micro-B -> USB Type-C power input
+                         (C165948) + CC pull-downs"
 Board file             : pico2_trace.kicad_pcb (unmodified by this pass —
                           see task-19-report.md gate: `git diff` empty)
 Generated with          : KiCad 9.0.2 (kicad-cli)
-Generation date (UTC)  : 2026-07-26T04:45:38Z
+Generation date (UTC)  : 2026-07-30T02:50:46Z
 
 Commands used
 -------------
@@ -75,10 +75,10 @@ or silk; the previous zip carried 13 such extra layers including a
   pico2_trace-Edge_Cuts.gm1     (Edge.Cuts)
   pico2_trace.drl               (drill, PTH+NPTH combined)
 
-  9 files, 691274 bytes uncompressed, 161917 bytes zipped.
+  9 files, 166655 bytes zipped (uncompressed sizes in the table above).
 
 sha256(pico2_trace_gerbers.zip):
-abad617cb89031559363627dd8ebcbfd0e672fd8f0c536023a95ec4daaeae9d7
+b3b874399a140de28516096795a74cff3a70016f6658b073eaa612bedaff3c78
 
 DRC at generation time: 0 unconnected_items, 2 silk_edge_clearance
 (pre-existing PICO footprint items, unchanged from prior tasks).
