@@ -26,20 +26,20 @@ Full fab/ output (29 files, all layers KiCad's default export produces)
 -------------------------------------------------------------------------
 pico2_trace-B_Adhesive.gba        467
 pico2_trace-B_Courtyard.gbr       441
-pico2_trace-B_Cu.gbl            194671
+pico2_trace-B_Cu.gbl            212797
 pico2_trace-B_Fab.gbr              450
-pico2_trace-B_Mask.gbs            5633
+pico2_trace-B_Mask.gbs            6130
 pico2_trace-B_Paste.gbp            468
 pico2_trace-B_Silkscreen.gbo       469
-pico2_trace.drl                   4567
+pico2_trace.drl                   4992
 pico2_trace-Edge_Cuts.gm1          916
 pico2_trace-F_Adhesive.gta         467
-pico2_trace-F_Courtyard.gbr      14506
-pico2_trace-F_Cu.gtl            275058
-pico2_trace-F_Fab.gbr           321638
-pico2_trace-F_Mask.gts           13019
-pico2_trace-F_Paste.gtp           8327
-pico2_trace-F_Silkscreen.gto    188614
+pico2_trace-F_Courtyard.gbr      15294
+pico2_trace-F_Cu.gtl            292628
+pico2_trace-F_Fab.gbr           332507
+pico2_trace-F_Mask.gts           13822
+pico2_trace-F_Paste.gtp           8667
+pico2_trace-F_Silkscreen.gto    194894
 pico2_trace-job.gbrjob             4226
 pico2_trace-Margin.gbr              441
 pico2_trace-User_1.gbr              441
@@ -47,10 +47,10 @@ pico2_trace-User_2.gbr              441
 pico2_trace-User_3.gbr              441
 pico2_trace-User_4.gbr              441
 pico2_trace-User_Comments.gbr    16318
-pico2_trace-User_Drawings.gbr    13701
+pico2_trace-User_Drawings.gbr    5405
 pico2_trace-User_Eco1.gbr           441
 pico2_trace-User_Eco2.gbr           441
-pos.csv                            3812
+pos.csv                            4084
 pico2_trace.drl is a single MixedPlating file (PTH vias/component holes
 + NPTH mounting holes together, per its own `TF.FileFunction` header) —
 KiCad did not split a separate NPTH file for this board.
@@ -75,7 +75,7 @@ or silk; the previous zip carried 13 such extra layers including a
   pico2_trace-Edge_Cuts.gm1     (Edge.Cuts)
   pico2_trace.drl               (drill, PTH+NPTH combined)
 
-  9 files, 166655 bytes zipped (uncompressed sizes in the table above).
+  9 files, 171662 bytes zipped (uncompressed sizes in the table above).
 
 sha256(pico2_trace_gerbers.zip):
 a6faa51e9a75aee79274dfbcd52d150297c4cbb35d477881b4de302ac99b5a77

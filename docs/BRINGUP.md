@@ -38,8 +38,8 @@ per-net/per-layer track length):
 | `J5`         | USB-A receptacle — PIO-USB **host** port (GP20/21)                     |
 | `J6`         | Cortex Debug 2×5 — plain J-Link (SWD only, no trace)                   |
 | `J7`         | JST-SH 3-pin — Raspberry Pi Debug Probe ("pico-debug") jack            |
-| `J8`         | micro-B, power-only — 5 V input for host-stack work                    |
-| `J9`         | micro-B — PIO-USB **device** port (GP18/19)                            |
+| `J8`         | USB **Type-C**, power-only — 5 V input for host-stack work             |
+| `J9`         | USB **Type-C** — PIO-USB **device** port (GP18/19)                     |
 | `J10`        | 3-pin dupont header — SWD (SWCLK/GND/SWDIO)                            |
 | `J_UART`     | UART0 console (GP12 TX / GP13 RX / GND)                                |
 | `J_STEMMA`   | STEMMA-QT / Qwiic I2C0 (GP8 SDA / GP9 SCL)                             |
@@ -279,6 +279,12 @@ for the full rationale):
 | `DEV_DP_PU_EN` — device D+ pull-up soft-connect | GP11       |
 | Native VBUS-detect tap                          | GP16       |
 | J9 device VBUS-detect                           | GP27       |
+
+> GP27 threshold note (2026-07-30 review): with J9 unplugged, driving
+> DEV_DP high (or enabling the GP11 pull-up) back-feeds `J9_VBUS` to
+> ~2.6 V through ESD_D's I/O→VBUS steering diode, putting ~1.3 V on
+> GP27. Treat "VBUS present" as `GP27 ≥ ~2 V` (divider gives 2.5 V at
+> a real 5 V VBUS), never "nonzero".
 | Host VBUS enable                                | GP17       |
 | Host VBUS fault (open-drain)                    | GP15       |
 | `ISENSE` — VBUS current-sense (ADC)             | GP26       |
