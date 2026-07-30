@@ -1,4 +1,15 @@
 # hw/checks.py
+import os
+import sys
+
+# Allow `python3 hw/checks.py ...` (the Task-9 brief's documented invocation)
+# to find the `hw` package even though plain `python3 <script>` only puts the
+# script's own directory (hw/), not the repo root, on sys.path. `-m pytest`
+# and `import hw.checks` already work without this (pytest and Python's own
+# package machinery insert the repo root themselves).
+if __name__ == "__main__":
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from hw.netlist import PARTS
 from hw.fp_lib import FP
 
@@ -97,3 +108,155 @@ def test_breakout():
     for n in range(21, 41):
         assert PARTS["J2B"].pins[str(n - 20)] == pico[str(n)] is not None, \
             f"breakout J2B pad {n - 20} not tied to PICO pin {n}"
+
+
+# --------------------------------------------------------------------------
+# Task 9: --compare-netlists -- authoritative schematic <-> reference-netlist
+# cross-check. A tiny S-expression reader (not a regex scrape) so it doesn't
+# care whether tokens are quoted -- our own hw.netlist.emit_netlist() writes
+# bare atoms (e.g. `(ref J5)`), while `kicad-cli sch export netlist` quotes
+# everything (`(ref "J5")`) and adds extra per-node fields like `(pintype
+# ...)`; both parse to the same tree shape either way.
+# --------------------------------------------------------------------------
+
+def _tokenize(text: str) -> list[str]:
+    tokens = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c.isspace():
+            i += 1
+        elif c in "()":
+            tokens.append(c)
+            i += 1
+        elif c == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 1
+            tokens.append(text[i : j + 1])
+            i = j + 1
+        else:
+            j = i
+            while j < n and not text[j].isspace() and text[j] not in "()":
+                j += 1
+            tokens.append(text[i:j])
+            i = j
+    return tokens
+
+
+def _parse_sexpr(tokens: list[str]):
+    """tokens -> nested list tree; consumes a single balanced form starting
+    at tokens[0] == '('."""
+    it = iter(tokens)
+
+    def read(tok):
+        if tok == "(":
+            items = []
+            while True:
+                t = next(it)
+                if t == ")":
+                    return items
+                items.append(read(t))
+        return tok.strip('"')
+
+    return read(next(it))
+
+
+def _find(tree, tag: str):
+    """Yield every list node `tree` contains (recursively) whose first
+    element equals `tag` (e.g. all `(net ...)` or `(node ...)` forms)."""
+    if isinstance(tree, list):
+        if tree and tree[0] == tag:
+            yield tree
+        for child in tree:
+            yield from _find(child, tag)
+
+
+def _field(node_list, tag: str):
+    """First `(tag value ...)` sub-form's value, under a parsed list node."""
+    for item in node_list:
+        if isinstance(item, list) and item and item[0] == tag:
+            return item[1]
+    return None
+
+
+def parse_netlist(path: str) -> dict[str, frozenset]:
+    """KiCad E-format netlist -> {net_name: frozenset((ref, pin))}.
+
+    Pseudo-components (refs starting with "#", e.g. `#PWR001` power-flag
+    symbols) are stripped, and any net left with fewer than 2 real nodes is
+    dropped -- that's exactly `kicad-cli sch export netlist`'s synthetic
+    `unconnected-(...)` single-node nets for `no_connect`-flagged pins, which
+    `emit_netlist()` never emits in the first place (see hw/netlist.py:
+    every real net has >=2 pins, per test_lint).
+    """
+    text = open(path).read()
+    tree = _parse_sexpr(_tokenize(text))
+    nets = {}
+    for net in _find(tree, "net"):
+        name = _field(net, "name")
+        nodes = set()
+        for node in _find(net, "node"):
+            ref = _field(node, "ref")
+            pin = _field(node, "pin")
+            if ref.startswith("#"):
+                continue
+            nodes.add((ref, pin))
+        if len(nodes) < 2:
+            continue
+        nets[name] = frozenset(nodes)
+    return nets
+
+
+def compare_netlists(path_a: str, path_b: str) -> bool:
+    nets_a = parse_netlist(path_a)
+    nets_b = parse_netlist(path_b)
+
+    parts_a = set(nets_a.values())
+    parts_b = set(nets_b.values())
+
+    if parts_a == parts_b:
+        print("netlists match")
+        return True
+
+    only_a = parts_a - parts_b
+    only_b = parts_b - parts_a
+
+    def name_for(nets, part):
+        for name, p in nets.items():
+            if p == part:
+                return name
+        return "?"
+
+    print("netlists DO NOT match")
+    if only_a:
+        print(f"-- partitions only in {path_a}:")
+        for part in sorted(only_a, key=lambda p: name_for(nets_a, p)):
+            print(f"   {name_for(nets_a, part)}: {sorted(part)}")
+    if only_b:
+        print(f"-- partitions only in {path_b}:")
+        for part in sorted(only_b, key=lambda p: name_for(nets_b, p)):
+            print(f"   {name_for(nets_b, part)}: {sorted(part)}")
+
+    # Informational: same node-set, different net name (not a match failure).
+    common = parts_a & parts_b
+    for part in sorted(common, key=lambda p: name_for(nets_a, p)):
+        na, nb = name_for(nets_a, part), name_for(nets_b, part)
+        if na != nb:
+            print(f"-- net name differs for identical nodes: {na!r} (in {path_a}) vs {nb!r} (in {path_b})")
+
+    return False
+
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--compare-netlists", nargs=2, metavar=("A", "B"))
+    args = ap.parse_args()
+
+    if args.compare_netlists:
+        ok = compare_netlists(*args.compare_netlists)
+        sys.exit(0 if ok else 1)
+    ap.print_help()

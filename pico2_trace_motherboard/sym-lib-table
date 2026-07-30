@@ -1,3 +1,4 @@
 (sym_lib_table
   (lib (name "pico2_trace")(type "KiCad")(uri "${KIPRJMOD}/sym/pico2_trace.kicad_sym")(options "")(descr ""))
+  (lib (name "gen")(type "KiCad")(uri "${KIPRJMOD}/sym/gen.kicad_sym")(options "")(descr ""))
 )
