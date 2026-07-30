@@ -90,31 +90,31 @@ Both JST-SH 3-pin, pinout **SWCLK / GND / SWDIO** (Raspberry Pi debug standard).
 
 ## 6. GPIO pin map (Pico/Pico 2, RP2350A header)
 
-| GPIO | Function                 | Notes                                                                 |
-| ---- | ------------------------ | --------------------------------------------------------------------- |
-| 0    | GND guard (JP2)          | pin 1, next to TRACECLK; jumper to GND, default on                    |
-| 1    | TRACECLK                 | funcsel 9 (CORESIGHT); also default UART0 RX — **not routed to UART** |
-| 2–5  | TRACEDATA0–3             | funcsel 9                                                             |
-| 6    | GND guard (JP3)          | pin 9, next to trace block; jumper to GND, default on                 |
-| 7    | spare                    |                                                                       |
-| 8    | I2C0 SDA (STEMMA-QT)     | moved off GP6/7 to keep active signals away from trace                |
-| 9    | I2C0 SCL (STEMMA-QT)     |                                                                       |
-| 10   | user LED                 |                                                                       |
-| 11   | spare                    |                                                                       |
-| 12   | UART0 TX (console)       | remapped off GP0/1 → **full-duplex console during trace**             |
-| 13   | UART0 RX (console)       |                                                                       |
-| 14   | user button              | to GND                                                                |
-| 15   | host VBUS fault          | load-switch open-drain flag; `OVERCURR_DETECT`-capable pin            |
-| 16   | native VBUS-detect tap   | `VBUS_DETECT`-capable; 8.2k/8.2k from VBUS net via JP-gate            |
-| 17   | host VBUS enable         | load-switch enable; `VBUS_EN`-capable pin                             |
-| 18   | PIO-USB device D+ (J9)   |                                                                       |
-| 19   | PIO-USB device D− (J9)   |                                                                       |
-| 20   | PIO-USB host D+ (J5)     |                                                                       |
-| 21   | PIO-USB host D− (J5)     |                                                                       |
-| 22   | spare                    |                                                                       |
-| 26   | VBUS current-sense (ADC) | shunt + INA181 amp output                                             |
-| 27   | J9 device VBUS-detect    | plain GPIO, 8.2k/8.2k divider                                         |
-| 28   | spare                    | ADC-capable                                                           |
+| GPIO | Function                             | Notes                                                                        |
+| ---- | ------------------------------------ | ---------------------------------------------------------------------------- |
+| 0    | GND guard (JP2)                      | pin 1, next to TRACECLK; jumper to GND, default on                           |
+| 1    | TRACECLK                             | funcsel 9 (CORESIGHT); also default UART0 RX — **not routed to UART**        |
+| 2–5  | TRACEDATA0–3                         | funcsel 9                                                                    |
+| 6    | GND guard (JP3)                      | pin 9, next to trace block; jumper to GND, default on                        |
+| 7    | spare                                |                                                                              |
+| 8    | I2C0 SDA (STEMMA-QT)                 | moved off GP6/7 to keep active signals away from trace                       |
+| 9    | I2C0 SCL (STEMMA-QT)                 |                                                                              |
+| 10   | user LED                             |                                                                              |
+| 11   | DEV_DP pull-up enable (soft-connect) | drive high = attach (1.5 kΩ to DEV_DP), Hi-Z = detach; decision input = GP27 |
+| 12   | UART0 TX (console)                   | remapped off GP0/1 → **full-duplex console during trace**                    |
+| 13   | UART0 RX (console)                   |                                                                              |
+| 14   | user button                          | to GND                                                                       |
+| 15   | host VBUS fault                      | load-switch open-drain flag; `OVERCURR_DETECT`-capable pin                   |
+| 16   | native VBUS-detect tap               | `VBUS_DETECT`-capable; 8.2k/8.2k from VBUS net via JP-gate                   |
+| 17   | host VBUS enable                     | load-switch enable; `VBUS_EN`-capable pin                                    |
+| 18   | PIO-USB device D+ (J9)               |                                                                              |
+| 19   | PIO-USB device D− (J9)               |                                                                              |
+| 20   | PIO-USB host D+ (J5)                 |                                                                              |
+| 21   | PIO-USB host D− (J5)                 |                                                                              |
+| 22   | spare                                |                                                                              |
+| 26   | VBUS current-sense (ADC)             | shunt + INA181 amp output                                                    |
+| 27   | J9 device VBUS-detect                | plain GPIO, 8.2k/8.2k divider                                                |
+| 28   | spare                                | ADC-capable                                                                  |
 
 Module-internal pins (not on header, unusable by the carrier): GP23 (SMPS PS), GP24 (VBUS sense), GP25 (LED), GP29 (VSYS/3 ADC).
 
@@ -140,7 +140,7 @@ Placement rationale for USB-mux pins: GP15/16/17 sit on `OVERCURR_DETECT` / `VBU
 
 ### 8.2 PIO-USB device (J9, micro-B) — GPIO18 (D+) / GPIO19 (D−)
 - Series R + **ESD array** on D+/D−.
-- **1.5 kΩ D+ pull-up to 3V3, gated** (small FET or firmware-driven) by the VBUS-detect so the board only signals "attached" when a host's VBUS is present (board is often self-powered, so 3V3 is up regardless).
+- **1.5 kΩ D+ pull-up, firmware-driven soft-connect:** 1.5 kΩ from DEV_DP to **GP11**; firmware drives GP11 high (3.3 V) to present the pull-up ("attached") or reconfigures it to Hi-Z input to soft-disconnect, so the board only signals "attached" when a host's VBUS is present (board is often self-powered, so 3V3 is up regardless). Gate decision input is **GP27** VBUS-detect. (A gate FET driven from the VBUS-detect divider midpoint was rejected: as a source-follower it can only pull D+ to ~Vgate−Vth, below the FS-attach threshold.)
 - **VBUS-detect:** 8.2 kΩ/8.2 kΩ divider from J9 VBUS → **GP27** (plain GPIO, read by the PIO-USB stack). Divider chosen so the pin sees ~2.5 V (logic-high, < 3.3 V so RP2040-safe, < 3.63 V so within the RP2350 unpowered-failsafe for hot-plug-while-off; R_bottom = 8.2 kΩ satisfies the RP2350-E9 external-pulldown requirement).
 - Default **detect-only** (self-powered). Optional (DNP) diode from J9 VBUS to the VBUS net if bus-powered device operation is ever wanted.
 

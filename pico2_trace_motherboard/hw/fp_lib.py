@@ -25,6 +25,11 @@ FP = {
     "mounthole": ("MountingHole", "MountingHole_3.2mm_M3"),
     "r0402": ("Resistor_SMD", "R_0402_1005Metric"),
     "c0402": ("Capacitor_SMD", "C_0402_1005Metric"),
+    "c0805": ("Capacitor_SMD", "C_0805_2012Metric"),  # Task 4: HOST_VBUS bulk cap (bigger than c0402)
     "led0603": ("LED_SMD", "LED_0603_1608Metric"),
     "shunt": ("Resistor_SMD", "R_1206_3216Metric"),
+    # Added in Task 3 for honest DNP-part footprints (both verified present
+    # under /usr/share/kicad/footprints/ before use):
+    "sod123": ("Diode_SMD", "D_SOD-123"),                                    # D_J9_BUSPWR (DNP)
+    "hdr_1x06": ("Connector_PinHeader_2.54mm", "PinHeader_1x06_P2.54mm_Vertical"),  # J_TRACE_TP (DNP)
 }
