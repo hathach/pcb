@@ -1,13 +1,13 @@
 Pico 2 SWD+ETM Trace Motherboard — fabrication output manifest
 ================================================================
 
-Source board revision : 5bdcdeb (5bdcdebbd56204dcb7892aab6e367b899242c6f0)
-                         "pcb: J8 micro-B -> USB Type-C power input
+Source board revision : c040a93 (c040a933050c214eb77ef12756937dedf24fe78b)
+                         "pcb: J9 micro-B -> USB Type-C device port
                          (C165948) + CC pull-downs"
 Board file             : pico2_trace.kicad_pcb (unmodified by this pass —
                           see task-19-report.md gate: `git diff` empty)
 Generated with          : KiCad 9.0.2 (kicad-cli)
-Generation date (UTC)  : 2026-07-30T02:50:46Z
+Generation date (UTC)  : 2026-07-30T08:19:17Z
 
 Commands used
 -------------
@@ -78,7 +78,7 @@ or silk; the previous zip carried 13 such extra layers including a
   9 files, 166655 bytes zipped (uncompressed sizes in the table above).
 
 sha256(pico2_trace_gerbers.zip):
-b3b874399a140de28516096795a74cff3a70016f6658b073eaa612bedaff3c78
+a6faa51e9a75aee79274dfbcd52d150297c4cbb35d477881b4de302ac99b5a77
 
 DRC at generation time: 0 unconnected_items, 2 silk_edge_clearance
 (pre-existing PICO footprint items, unchanged from prior tasks).
