@@ -1,8 +1,9 @@
 # pcb — PCB projects home
 
-Each board is a self-contained git repo in its own directory (gitignored
-here); this umbrella repo versions the shared knowledge, footprints, and
-tooling that future boards reuse.
+One repo, Adafruit-style: every board lives in its own directory here,
+alongside the shared knowledge, footprints, and tooling that future
+boards reuse. Board pico2_trace_motherboard's original 50-commit build
+history is preserved on branch `archive/pico2-original`.
 
 ## Layout
 

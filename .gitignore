@@ -1,2 +1,1 @@
-# Each board is its own independent git repo -- never embedded in the
-# umbrella repo; boards live INSIDE this repo (monorepo, Adafruit-style).
+# Monorepo (Adafruit-style): boards live inside this repo, one dir each.

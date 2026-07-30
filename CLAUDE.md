@@ -4,12 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # PCB Projects — Agent Instructions
 
-This tree is the home for hathach's PCB designs. `~/code/pcb` is an
-umbrella git repo versioning only the tree-level files (README, CLAUDE.md,
-the handoff brief, `tools/`); **each board is its own independent nested
-git repo** (`pico2_trace_motherboard/.git`) listed in `.gitignore` — never
-`git add` a board directory into the umbrella, and run board commits inside
-the board directory. Read `README.md` for the inventory, and the board's
+This tree is the home for hathach's PCB designs — a **monorepo,
+Adafruit-style**: every board lives in its own directory of this single
+repo (github.com/hathach/pcb), alongside the shared docs, footprint lib,
+and tools. Read `README.md` for the inventory, and the board's
 own docs before touching anything. Before any pcbnew scripting read
 `docs/kicad-pcbnew-facts.md`; to start a new board read `docs/pipeline.md`;
 parts sourcing starts at `docs/parts-palette.md`; shared audited footprints
