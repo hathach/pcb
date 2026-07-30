@@ -133,7 +133,12 @@ _add(Part(
 # source/charger presents VBUS at all -- a bare CC pin gets 0V from a
 # compliant supply.
 _add(Part("J8", "USB-C PWR", "usb_c_pwr", _numbered(7)))
-_add(Part("J9", "USB-MICROB DEV", "usb_microb", _numbered(6)))
+# J9 (user request, 2026-07-30, second Type-C pass): micro-B -> USB Type-C
+# device port. usb_c_dev renumbered pads: 1=VBUS, 2=CC1, 3=CC2, 4=GND,
+# 5=D+ (two pads, board-bridged), 6=D- (ditto), 7=SBU NC, 8=VBUS second
+# column board-NC, 9=shield. As a UFP device it needs Rd (R_CC3/R_CC4
+# 5.1k) on CC1/CC2 -- without them a Type-C host never detects attach.
+_add(Part("J9", "USB-C DEV", "usb_c_dev", _numbered(9)))
 
 # --- Peripherals -----------------------------------------------------------
 _add(Part("J_UART", "UART0", "hdr_1x03", _pins("1", "2", "3")))          # TX/RX/GND
@@ -215,12 +220,15 @@ _add(Part("R_NVD_B", "8.2k", "r0402", _pins("1", "2")))   # native VBUS-detect d
 _add(Part("R_J9VD_T", "8.2k", "r0402", _pins("1", "2")))  # J9 VBUS-detect divider, top leg
 _add(Part("R_J9VD_B", "8.2k", "r0402", _pins("1", "2")))  # J9 VBUS-detect divider, bottom leg (-> GND)
 
-# --- J8 Type-C CC pull-downs (Rd, USB Type-C spec 4.5.1.2.3) ----------------
-# 5.1k +-10% max from each CC pin to GND marks the port as a UFP power sink;
-# without them a compliant Type-C source never enables VBUS. Wired in the
-# Task-4 power section alongside J8 itself.
+# --- J8/J9 Type-C CC pull-downs (Rd, USB Type-C spec 4.5.1.2.3) -------------
+# 5.1k +-10% max from each CC pin to GND marks the port as a UFP power sink
+# (J8) / attached device (J9); without them a compliant Type-C source never
+# enables VBUS and a host never sees the device. Wired in the Task-4 power
+# section (J8) and the device-port section (J9).
 _add(Part("R_CC1", "5.1k", "r0402", _pins("1", "2")))     # J8 CC1 -> GND
 _add(Part("R_CC2", "5.1k", "r0402", _pins("1", "2")))     # J8 CC2 -> GND
+_add(Part("R_CC3", "5.1k", "r0402", _pins("1", "2")))     # J9 CC1 -> GND
+_add(Part("R_CC4", "5.1k", "r0402", _pins("1", "2")))     # J9 CC2 -> GND
 
 # --- LEDs + series resistors -------------------------------------------
 # Placeholder 1k series value; final current-limit value is a BOM tuning
@@ -464,7 +472,16 @@ PARTS["ESD_D"].pins.update({
     "IO2": "DEV_DM", "IO2B": "DEV_DM",
     "VBUS": "J9_VBUS",
 })
-PARTS["J9"].pins.update({"1": "J9_VBUS", "2": "DEV_DM", "3": "DEV_DP", "5": "GND", "6": "GND"})
+# J9 (usb_c_dev renumbered pads): D+ pad group "5" (A6/B6) and D- group
+# "6" (A7/B7) are each TWO physical pads bridged by board copper
+# (hw/route_trace._route_j9_typec); CC1/CC2 carry their own nets into the
+# R_CC3/R_CC4 Rd resistors.
+PARTS["J9"].pins.update({
+    "1": "J9_VBUS", "2": "J9_CC1", "3": "J9_CC2", "4": "GND",
+    "5": "DEV_DP", "6": "DEV_DM", "9": "GND",
+})
+PARTS["R_CC3"].pins.update({"1": "J9_CC1", "2": "GND"})
+PARTS["R_CC4"].pins.update({"1": "J9_CC2", "2": "GND"})
 
 # --- Device VBUS-detect divider (DESIGN SS8.2): J9_VBUS -> 8.2k/8.2k -> GND,
 # midpoint = DEV_VBUS_DET = GP27 (divider midpoint, itself the function node).
@@ -578,12 +595,14 @@ for _pico_pad, _net in PARTS["PICO"].pins.items():
 PARTS["J8"].nc |= {"5", "7"}
 
 # J8 shield (pad 6, 4x PTH legs): tied to GND, same treatment as J9's
-# micro-B shield (PARTS["J9"].pins["6"] = "GND").
+# Type-C shield (pad "9" in J9's own pins.update).
 PARTS["J8"].pins["6"] = "GND"
 
-# J9 ID (DESIGN SS8.2: self-powered, detect-only device port -- no OTG role
-# for this connector): genuinely unused, no-connect.
-PARTS["J9"].nc |= {"4"}
+# J9 (Type-C since 2026-07-30): pad "7" = SBU pair (unused on a USB2-only
+# device port) and pad "8" = the second VBUS column (A9/B4) -- board-NC for
+# the same NPTH-peg reason as J8's pad "7"; the plug parallels the VBUS
+# beams. (The old micro-B nc was {"4"} = ID.)
+PARTS["J9"].nc |= {"7", "8"}
 
 # --------------------------------------------------------------------------
 # Task 14b: model pass -- Adafruit-style DNP realization (footprint present +

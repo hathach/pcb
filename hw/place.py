@@ -255,8 +255,21 @@ POS: dict[str, tuple[float, float, float]] = {
     "R_DDP": (69.0, 43.75, 0),
     "R_DDM": (69.0, 45.65, 0),
     "ESD_D": (77.5, 44.7, 0),
-    "R_J9VD_B": (80.9, 47.3, 270),
-    "R_J9VD_T": (82.6, 47.3, 90),
+    # J9 Type-C swap (2026-07-30 second pass): the VBUS-detect divider
+    # moves from the old (80.9/82.6, 47.3) pocket -- which the Type-C
+    # courtyard (x>=82.58, y 39.68-50.32) now covers -- to the open band
+    # SOUTH of the connector, joined by J9's CC pull-downs. Lane plan (all
+    # DRC-derived in hw/route_trace._route_j9_typec): CC1 descends at
+    # x=78.5 into R_CC3.1; CC2 descends on B_Cu at x=80.35 into R_CC4.1;
+    # J9_VBUS descends at x=81.3 and joins the diode/T.1 web at y=53.4;
+    # DEV_VBUS_DET arrives on B_Cu at x=86.2 into R_J9VD_B.1.
+    # Rotations (probed): 270 puts pad "1" north, 90 puts it south.
+    # CC3/CC4 sit 0.2mm+ south of D_J9_BUSPWR's courtyard (bottom ~51.6,
+    # DRC-probed -- the first attempt at y 52.3/51.81 overlapped it).
+    "R_J9VD_B": (82.0, 52.0, 270),   # pad1 north (51.49) = DEV_VBUS_DET
+    "R_J9VD_T": (83.5, 52.0, 90),    # pad1 south (52.51) = J9_VBUS
+    "R_CC3": (78.5, 53.1, 270),      # pad1 north (52.59) = J9_CC1
+    "R_CC4": (80.35, 53.0, 270),     # pad1 north (52.49) = J9_CC2
     # Task 18: rotation flipped 180->0 to match the netlist.py pad-direction
     # fix (pad1=CATHODE/VBUS_NET, pad2=ANODE/J9_VBUS, was backwards). The
     # SOD-123 footprint's two pads are symmetric rectangles at local
@@ -268,7 +281,13 @@ POS: dict[str, tuple[float, float, float]] = {
     # zero routing geometry change, see route_trace.py's matching pad-
     # number swap.
     "D_J9_BUSPWR": (77.7, 50.5, 0),
-    "J9": (88.255, 45.0, 90),
+    # J9 (Type-C swap): usb_c_dev's F.Fab front lip is at local +4.15; at
+    # rot 90 (board = (ax + ly, ay - lx)) the lip lands at ax + 4.15, so
+    # ax = 87.85 keeps it flush at the right edge (x=92... lip at 92.0).
+    # Pad row at x = 83.805, pads spanning y 41.75-48.25 around ay=45.0;
+    # NPTH pegs at (85.25, 42.11/47.89); shield PTH pairs at x 84.72 /
+    # 88.9, y 40.68 & 49.32. Courtyard x 82.58-92, y 39.68-50.32.
+    "J9": (87.85, 45.0, 90),
 
     # --- Task 18: VSYS feed diode + decoupling caps (pre-fab review).
     # D_VSYS sits in the open PICO/J2B row gap (courtyard-clear band
@@ -488,7 +507,9 @@ FUNC_LABELS: list[tuple[str, float, float, int]] = [
     # silk band west of R_CC2's courtyard (which starts at x~20.9), one
     # row above "VBUS DET" (18.1-23.9, y 7.95-9.15).
     ("5V IN", 16.3, 6.3, 0),        # J8 (west of the Type-C body + R_CCs)
-    ("USB DEV", 88.86, 39.5, 0),    # J9
+    # "USB DEV" moved clear of J9's Type-C body (courtyard now y>=39.68 at
+    # x>=82.58 -- the old spot sat on the shell).
+    ("USB DEV", 87.3, 38.9, 0),     # J9 (above the Type-C body)
     ("ETM TRACE", 14.89, 54.3, 0),  # J3
     ("SWD", 52.4, 54.3, 0),         # J6
     ("PROBE", 69.57, 54.3, 0),      # J7
@@ -508,7 +529,9 @@ FUNC_LABELS: list[tuple[str, float, float, int]] = [
     # task-18-report.md) -- RESET north of SW1, between D_J9_BUSPWR
     # (bottom 51.695) and C_NRESET (top 54.89); USER north of SW_USER, in
     # the open strip along the top board edge.
-    ("RESET", 79.06, 53.0, 0),      # SW1
+    # "RESET" moved west: the old (79.06,53.0) spot now collides with
+    # R_CC3/R_CC4's mask openings and the J9_VBUS spine.
+    ("RESET", 75.2, 54.2, 0),       # SW1
     # x=74.0 (not SW_USER's own centre, 71.5): the board-name text
     # ("PICO2 TRACE MB") spans x=56.3-71.7 at this same y-band -- DRC-
     # caught silk_overlap at 71.5. 74.0 clears it with margin.
