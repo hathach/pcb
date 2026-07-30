@@ -125,10 +125,12 @@ _add(Part(
 # J8 (user request, 2026-07-30 order session): micro-B -> USB Type-C
 # (power-only 5V input). fp_class usb_c_pwr's renumbered pads: 1=VBUS
 # (A4/B9 column), 2=CC1, 3=CC2, 4=GND, 5=NC (D+/D-/SBU), 6=shield,
-# 7=VBUS second column (A9/B4) -- board-NC, because the footprint's NPTH
-# alignment peg blocks every legal 0.2mm escape from that column
-# (DRC-proven); the mating plug parallels all four VBUS beams, so A4/B9
-# alone (2 contacts, 1.25A each per the Type-C spec) covers the 5V input.
+# 7=VBUS second column (A9/B4) -- board-NC by DECISION: no Power-class
+# (0.5mm) escape fits past the NPTH alignment peg, and the only legal
+# Default-width escape clears the peg by 0.015mm (review-derived) --
+# not worth it, since the mating plug parallels all four VBUS beams and
+# A4/B9 alone (2 contacts, 1.25A each per the Type-C spec) covers the
+# 5V input.
 # CC1/CC2 each need a 5.1k Rd to GND (R_CC1/R_CC2 below) so a Type-C
 # source/charger presents VBUS at all -- a bare CC pin gets 0V from a
 # compliant supply.
@@ -461,9 +463,9 @@ PARTS["U_ISNS"].pins.update({
 PARTS["PICO"].pins["31"] = "ISENSE"
 
 # --- Device port (DESIGN SS8.2): PICO GP18/GP19 -> 22R series -> DEV_DP/DM ->
-# J9, with ESD_D across the pair. J9 numbering follows J8's convention
-# (1 VBUS, 2 D-, 3 D+, 4 ID, 5 GND, 6 shield); ID stays unassigned (device-
-# only connector, same treatment as J8's untouched D+/D-/ID/shield in Task 4).
+# J9, with ESD_D across the pair. J9 is the usb_c_dev Type-C since
+# 2026-07-30 (1=VBUS, 2=CC1, 3=CC2, 4=GND, 5=D+, 6=D-, 7=SBU nc,
+# 8=second VBUS column nc, 9=shield) -- see the Part definition above.
 PARTS["PICO"].pins.update({"24": "GP18", "25": "GP19"})
 PARTS["R_DDP"].pins.update({"1": "GP18", "2": "DEV_DP"})
 PARTS["R_DDM"].pins.update({"1": "GP19", "2": "DEV_DM"})

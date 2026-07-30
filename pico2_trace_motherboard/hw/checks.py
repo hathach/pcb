@@ -55,6 +55,16 @@ def test_usb_nets():
     from hw.netlist import net_pins, series_between, divider_ratio, _PICO_GPIO_PAD
     assert divider_ratio("VBUS_NET","NATIVE_VBUS_DET") == (8200,8200)   # via JP4
     assert divider_ratio("J9_VBUS","DEV_VBUS_DET") == (8200,8200)
+    # Type-C pad-map regression guards (2026-07-30 review advisory): pin the
+    # CC Rd nets and the J8/J9 renumbered pad assignments -- pad numbers
+    # 1..9 mean nothing outside the two local footprints, so a swap back to
+    # a stock land would otherwise surface only as build_board's late
+    # per-pad assert.
+    for cc_net, rd in (("J8_CC1","R_CC1"), ("J8_CC2","R_CC2"),
+                       ("J9_CC1","R_CC3"), ("J9_CC2","R_CC4")):
+        assert series_between(cc_net, "GND", rd), f"{rd} not {cc_net}->GND Rd"
+    assert ("J8","1") in net_pins("VBUS_NET") and ("J9","1") in net_pins("J9_VBUS")
+    assert ("J9","5") in net_pins("DEV_DP") and ("J9","6") in net_pins("DEV_DM")
     assert series_between("GP20","HOST_DP")                              # 22R series (any R)
     assert ("U_HSW","EN") in net_pins("HOST_VBUS_EN") and ("U_HSW","FLG") in net_pins("HOST_VBUS_FLT")
     assert ("TP1","1") in net_pins("HOST_DP")   # probe point present

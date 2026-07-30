@@ -46,8 +46,8 @@ Prior art consulted: SEGGER STM32H7/STM32F407 Trace Reference Board schematics (
 | J5       | USB-A receptacle, THT right-angle                                                                 | PIO-USB **host** port                                        |
 | J6       | 2×5 1.27 mm Cortex Debug (Conn_ARM_JTAG_SWD_10 / FTSH-105-01-L-DV-K)                              | plain J-Link: SWD only                                       |
 | J7       | JST-SH 1.0 mm 3-pin, right-angle                                                                  | Raspberry Pi **Debug Probe** ("pico-debug") jack, mirrors J4 |
-| J8       | micro-B receptacle, **power-only** (VBUS+GND; D+/D− NC)                                           | 5 V input for host-stack work                                |
-| J9       | micro-B receptacle                                                                                | PIO-USB **device** port                                      |
+| J8       | USB Type-C receptacle, **power-only** (as-built 2026-07-30; was micro-B)                          | 5 V input for host-stack work                                |
+| J9       | USB Type-C receptacle (as-built 2026-07-30; was micro-B)                                          | PIO-USB **device** port                                      |
 | JP1      | 3-pin header + shunt                                                                              | board 5 V source select: VBUS-net ↔ J-Trace 5 V              |
 | JP2, JP3 | 2-pin header + shunt (default fitted)                                                             | GP0 / GP6 GND **guard** jumpers                              |
 | JP4      | 2-pin header + shunt (default fitted)                                                             | native VBUS-detect tap enable → GP16 (§9)                    |
@@ -145,7 +145,7 @@ Placement rationale for USB-mux pins: GP15/16/17 sit on `OVERCURR_DETECT` / `VBU
 - **VBUS via a current-limited load switch** (TPS2051B / AP22653 / MIC2005 class): enable = GP17, open-drain fault = GP15, 10–22 µF bulk + 0.1 µF at the connector. (Replaces the earlier plain polyfuse; the switch's current limit + fault flag give host over-current control/observability.)
 - **Probe points:** TP pads on D+/D− + GND at the port for the ataradov sniffer / scope.
 
-### 8.2 PIO-USB device (J9, micro-B) — GPIO18 (D+) / GPIO19 (D−)
+### 8.2 PIO-USB device (J9; USB Type-C as-built 2026-07-30) — GPIO18 (D+) / GPIO19 (D−)
 - Series R + **ESD array** on D+/D−.
 - **1.5 kΩ D+ pull-up, firmware-driven soft-connect:** 1.5 kΩ from DEV_DP to **GP11**; firmware drives GP11 high (3.3 V) to present the pull-up ("attached") or reconfigures it to Hi-Z input to soft-disconnect, so the board only signals "attached" when a host's VBUS is present (board is often self-powered, so 3V3 is up regardless). Gate decision input is **GP27** VBUS-detect. (A gate FET driven from the VBUS-detect divider midpoint was rejected: as a source-follower it can only pull D+ to ~Vgate−Vth, below the FS-attach threshold.)
 - **VBUS-detect:** 8.2 kΩ/8.2 kΩ divider from J9 VBUS → **GP27** (plain GPIO, read by the PIO-USB stack). Divider chosen so the pin sees ~2.5 V (logic-high, < 3.3 V so RP2040-safe, < 3.63 V so within the RP2350 unpowered-failsafe for hot-plug-while-off; R_bottom = 8.2 kΩ satisfies the RP2350-E9 external-pulldown requirement).

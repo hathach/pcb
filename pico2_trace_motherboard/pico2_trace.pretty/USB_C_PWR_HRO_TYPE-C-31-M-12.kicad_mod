@@ -3,7 +3,7 @@
 	(generator "pcbnew")
 	(generator_version "9.0")
 	(layer "F.Cu")
-	(descr "Power-only renumber (1=VBUS A4/B9, 2=CC1, 3=CC2, 4=GND, 5=NC data/SBU, 6=shield, 7=VBUS A9/B4 second column, board-NC -- NPTH peg blocks any legal escape; plug parallels all 4 VBUS beams so A4/B9 alone carries the 5V) of: USB Type-C receptacle for USB 2.0 and PD, http://www.krhro.com/uploads/soft/180320/1-1P320120243.pdf")
+	(descr "Power-only renumber (1=VBUS A4/B9, 2=CC1, 3=CC2, 4=GND, 5=NC data/SBU, 6=shield, 7=VBUS A9/B4 second column, board-NC by decision -- no Power-width escape past the NPTH peg, Default-width escape clears by only 0.015mm; plug parallels all 4 VBUS beams so A4/B9 alone carries the 5V) of: USB Type-C receptacle for USB 2.0 and PD, http://www.krhro.com/uploads/soft/180320/1-1P320120243.pdf")
 	(tags "usb usb-c 2.0 pd")
 	(property "Reference" "REF**"
 		(at 0 -5.645 0)

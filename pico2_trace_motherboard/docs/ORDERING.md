@@ -1,9 +1,10 @@
 # JLCPCB Ordering Guide — Pico 2 Trace Motherboard REV A
 
-Full assembly (SMT + through-hole). Board revision `6d67559`; files from commit
-`e0a6686`. The three upload files are staged in `~/Desktop/jlcpcb-order/` and
-live in the repo at `fab/pico2_trace_gerbers.zip`, `docs/BOM_jlc.csv`,
-`docs/CPL_jlc.csv`. Gerber zip sha256 `abad617c…eaea9d7` (see `fab/MANIFEST.txt`).
+Full assembly (SMT + through-hole). Board revision: see `fab/MANIFEST.txt`
+(authoritative source rev + zip sha256 — the Type-C swaps of 2026-07-30
+superseded the original `6d67559` freeze). The three upload files are staged
+in `~/Desktop/jlcpcb-order/` and live in the repo at
+`fab/pico2_trace_gerbers.zip`, `docs/BOM_jlc.csv`, `docs/CPL_jlc.csv`.
 
 ## 1. PCB quote
 
@@ -26,17 +27,17 @@ live in the repo at `fab/pico2_trace_gerbers.zip`, `docs/BOM_jlc.csv`,
 
 ## 2. PCB Assembly
 
-1. Toggle **PCB Assembly**. Assembly side = **Top** (all 51 parts are top-side).
+1. Toggle **PCB Assembly**. Assembly side = **Top** (all 55 placements are top-side).
    Assembly qty **2 or 5** (2 = JLC minimum, halves part cost; 5 = all boards).
    If the UI distinguishes Economic vs Standard: these THT parts are listed by
    JLC as wave-solder compatible under both — accept whatever it selects, the
    live price is authoritative.
 2. Next page → upload **BOM** = `BOM_jlc.csv`, **CPL** = `CPL_jlc.csv`.
-3. **Parts matching page** — all 27 lines carry verified LCSC numbers and
+3. **Parts matching page** — all 28 lines carry verified LCSC numbers and
    should auto-match. Check these specifically:
-   - **Low-stock risks** (numbers seen at lookup, 2026-07-29): J8/J9 Molex
-     micro-B `C132560` (~12 units — 5 boards need 10), J_STEMMA `C160404`
-     (~59), J5 GCT USB-A `C6307429` (~54). If any shows out-of-stock:
+   - **Low-stock risks** (numbers seen at lookup, 2026-07-29): J_STEMMA
+     `C160404` (~59), J5 GCT USB-A `C6307429` (~54). If any shows
+     out-of-stock:
      deselect that line and hand-solder it later, or use JLC **Global
      Sourcing** for it.
    - J3/J6 are **genuine Samtec** (`C20728453` / `C448647`, ~$5–8 ea). A cheap
@@ -69,8 +70,6 @@ live in the repo at `fab/pico2_trace_gerbers.zip`, `docs/BOM_jlc.csv`,
 
 | Item                      | Note                                                                          |
 | ------------------------- | ----------------------------------------------------------------------------- |
-| 1x03 pin header ×3/brd    | JP1/J_UART/J10 (C124376) — deselected from PCBA, hand-solder                  |
-| 1x02 pin header ×3/brd    | JP2/JP3/JP4 (C124375) — deselected from PCBA, hand-solder                     |
 | 4× jumper shunts, 2.54 mm | JP1–JP4 (fit JP2/JP3/JP4 by default; JP1 to taste)                            |
 | JST-SH cable              | JST-SH→dupont (for J10) or JST-SH→JST-SH (for J7); ships with RPi Debug Probe |
 | M3 screws/standoffs ×4    | MH1–MH4                                                                       |
@@ -79,29 +78,18 @@ Assembly-config history (2026-07-29/30 order sessions): deselecting ALL THT
 header lines cut the Economic PCBA quote $82.17 → $71.63 per 2 boards (parts
 −$3.53, hand-solder labor −$3.58, manual assembly −$3.43; lead time 2-3 d →
 1-2 d; the $42.98 Extended-parts fee did NOT change — JLC charges it on
-matched lines regardless of deselection). Final config per user decision:
-**sockets (PICO1/PICO2/J1B/J2B) back IN** — the carrier is the point of the
-board — **pin headers stay out** (trivial to hand-solder, and any single THT
-line re-adds the ~$7 labor fees anyway, so keeping the 6 tiny headers out
-costs nothing extra once the sockets are back).
-
-## 8. J8 micro-B → USB Type-C (2026-07-30, pre-order board change)
-
-`J8` (5V-IN power port) was rebuilt as USB Type-C before ordering: LCSC
-**C165948** (HRO TYPE-C-31-M-12, JLC **Basic** — cheaper than the Molex
-micro-B it replaces) + **R_CC1/R_CC2** 5.1 kΩ 0402 Rd pull-downs (LCSC
-**C25905**, Basic; any in-stock 5.1k 0402 substitutes fine — the Type-C spec
-allows ±10%). New fab zip + BOM_jlc/CPL_jlc regenerated — re-upload ALL
-THREE files when re-ordering; the old Y-revisions in the JLC cart predate
-this change. Gates at regeneration: DRC 0 unconnected + the 2 known silk
-warnings only, ERC warnings-only, model↔schematic netlists match, GND pour
-union-find = 1 component.
+matched lines regardless of deselection). Interim config had sockets in
+and pin headers out ($83.27); final user decision: **EVERYTHING assembled**
+(headers-out saved only ~$1.4 once the sockets' labor fees were back — "not
+worthy"). With both Type-C swaps the full-assembly PCBA landed at **$79.47**
+per 2 boards, cheaper than the original all-micro-B config ($82.17).
 
 All are LCSC items too — add to the same cart to combine shipping.
 
 ## 5. After ordering
 
-- Note the JLC order number next to `fab/MANIFEST.txt` for traceability.
+- Ordered 2026-07-30: **W2026073018593887** (Y14, 5 PCB / 2 assembled,
+  $81.27) — recorded in `fab/MANIFEST.txt`.
 - On arrival: `docs/BRINGUP.md` — first-power checklist, jumper table, then
   the trace bring-up ladder (48 → 80 → 120 → 150 MHz core).
 
@@ -128,7 +116,7 @@ primary whenever both are buyable.
 | Buttons B3S-1000 | C2733655 Omron (Ext)           | C180420 Omron B3S-1000P (same land)        | either (same part, diff packaging)      |
 | 1x03 header      | C124376 Ckmtw (Ext)            | C49257 BOOMELE (Ext)                       | either                                  |
 | 1x20 socket x4   | C124410 Ckmtw (Ext)            | C2905423 Kinghelm 8.5mm (Ext)              | either                                  |
-| Micro-B J8/J9    | C132560 Molex genuine (Ext)    | none verified — Global Sourcing if dry     | primary (13k stock at last check)       |
+| Type-C J8/J9     | C165948 HRO (Basic, measured)  | any TYPE-C-31-M-12-land clone              | primary (both ports since 2026-07-30)   |
 | STEMMA           | C51940130 XYECONN (measured)   | C160404 JST genuine (if recovered)         | either; genuine preferred if buyable    |
 
 ## 7. Live-session substitutions (2nd parts-page snapshot, 11 flagged rows)
@@ -149,7 +137,27 @@ hand-solder that part (recommended outright for J8/J9 — no verified clone).
 | 1x03 C124376     | C49257 BOOMELE                                      |
 | Sockets C124410  | C2905423 Kinghelm 8.5mm                             |
 | Buttons C2733655 | C180420 Omron B3S-1000P (same land)                 |
-| J8/J9 C132560    | exact Molex 47346 only; else DESELECT + hand-solder |
+| J8/J9 C165948    | any exact TYPE-C-31-M-12 land-pattern part          |
 
 Before substituting, hover one ⚠ icon: if the tooltip says "confirm"/"check"
 rather than out-of-stock, those rows may only need their checkbox ticked.
+
+## 8. Micro-B → USB Type-C swaps (2026-07-30, pre-order board changes)
+
+Both micro-B ports were rebuilt as USB Type-C before ordering (LCSC
+**C165948**, HRO TYPE-C-31-M-12, JLC **Basic** — cheaper than the Molex
+micro-B it replaces; no micro-B remains on the board):
+
+- **J8** (5V-IN, power-only) + `R_CC1`/`R_CC2` 5.1 kΩ Rd pull-downs (LCSC
+  **C25905**, Basic; any in-stock 5.1k 0402 substitutes — the Type-C spec
+  allows ±10%). Without Rd a compliant Type-C source supplies no VBUS.
+- **J9** (PIO-USB device port) + `R_CC3`/`R_CC4` Rd (host never detects a
+  device without them). The USB2 D+/D− pad pairs are bridged on-board; the
+  VBUS-detect divider `R_J9VD_T`/`R_J9VD_B` moved to the band south of the
+  connector.
+
+Each swap regenerated the fab zip + BOM_jlc/CPL_jlc — re-upload ALL THREE
+files when re-ordering; older Y-revisions in the JLC cart predate these
+changes. Gates at each regeneration: DRC 0 unconnected + the 2 known silk
+warnings only, checks 7/7, ERC warnings-only, model↔schematic netlists
+match, GND pour union-find = 1 component.

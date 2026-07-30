@@ -43,7 +43,6 @@ FP = {
     "jst_sh3": ("Connector_JST", "JST_SH_SM03B-SRSS-TB_1x03-1MP_P1.00mm_Horizontal"),
     "jst_sh4": ("Connector_JST", "JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal"),
     "usb_a": ("Connector_USB", "USB_A_Receptacle_GCT_USB1046"),
-    "usb_microb": ("Connector_USB", "USB_Micro-B_Molex_47346-0001"),
     # usb_c_pwr (J8 micro-B -> Type-C swap, 2026-07-30 order session): local
     # copy of stock USB_C_Receptacle_HRO_TYPE-C-31-M-12 (the land pattern of
     # LCSC C165948, JLC Basic) with pads *renumbered* so gen_sch.py's
