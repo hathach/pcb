@@ -753,21 +753,15 @@ _LOCAL_TIES = [
     ("NVD_TOP", "JP4", "2", "R_NVD_T", "1", "vh"),
     ("NRESET", "C_NRESET", "1", "SW1", "1", "hv"),
     # Device USB port: ESD_D feed-through ties (IO1/IO1B share DEV_DP,
-    # IO2/IO2B share DEV_DM) + R_DDP/R_DDM series resistor -> ESD_D -> J9.
-    # ESD_D.6->J9.3 uses vh (not hv): J9's 5 signal pads share x=86.795 --
-    # an hv bend's horizontal leg lands ON that column at the *wrong* pad's
-    # y first (clips J9.5/J9.4 before reaching J9.3); vh's vertical leg
-    # stays on ESD_D's own column (safe) and only touches x=86.795 once,
-    # already at J9.3's own y.
-    # ESD_D.6->J9.3 is routed separately (_route_dev_dp_esd_j9 below) --
-    # J9's own pad5 (J9_VBUS) sits directly under ESD_D.6 on the same
-    # column and needs a jog-around, same treatment as the R_HDP_PD etc.
+    # IO2/IO2B share DEV_DM) + R_DDP/R_DDM series resistor -> ESD_D. The
+    # ESD_D -> J9 legs live in _route_j9_typec (Type-C pad geometry).
     ("DEV_DP", "ESD_D", "1", "ESD_D", "6", "d"),
     ("DEV_DP", "R_DDP", "2", "ESD_D", "1", "hv"),
-    # ESD_D.4<->J9.2 are exactly level (both y=45.65) -- direct, no bend.
     ("DEV_DM", "ESD_D", "3", "ESD_D", "4", "d"),
     ("DEV_DM", "R_DDM", "2", "ESD_D", "3", "hv"),
-    ("DEV_DM", "ESD_D", "4", "J9", "2", "d"),
+    # ESD_D.4 -> J9 (DEV_DM) moved to _route_j9_typec: J9 is a Type-C now
+    # -- its old pad "2" is CC1, and DEV_DM lands on the two-pad "6" group
+    # that needs a bridge, not a plain tie.
     # Host USB port: ESD_H feed-through ties + pulldowns + probe points.
     # R_HDP_PD/R_HDM_PD's own pad1(signal)/pad2(GND) are 1mm apart on the
     # SAME x -- vh (not hv) so the final approach is horizontal at pad1's
@@ -787,15 +781,9 @@ _LOCAL_TIES = [
     # HOST_5V_IN F_Cu ladder below).
     ("HOST_VBUS", "C_HVBUS_100n", "1", "C_HVBUS_BULK", "1", "hv"),
     ("HOST_VBUS", "J5", "1", "C_HVBUS_100n", "1", "vh"),
-    # J9_VBUS web (D_J9_BUSPWR DNP anode -> R_J9VD_T top leg -> J9). The
-    # ESD_D.5 tap is routed separately (_route_j9_vbus_esd_tap) -- R_J9VD_T's
-    # own pad1(J9_VBUS)/pad2(DEV_VBUS_DET) share x=82.6, so a naive path
-    # toward ESD_D (west) sweeping through pad2's y needs the same jog-around
-    # treatment as R_HDP_PD/R_HDM_PD above, done explicitly there.
-    # Task 18: pad "2" (was "1" pre-fix) -- D_J9_BUSPWR's direction fix
-    # rotated the footprint 180 degrees, swapping which pad number sits at
-    # this same physical (east) location; see netlist.py/place.py.
-    ("J9_VBUS", "D_J9_BUSPWR", "2", "R_J9VD_T", "1", "hv"),
+    # J9_VBUS web: entirely in _route_j9_typec since the Type-C swap (the
+    # divider moved south of the connector; the old hv tie's path is now
+    # under J9's courtyard).
 ]
 
 
@@ -1540,19 +1528,25 @@ def _route_pico_row_jog(board):
         _add_via(board, ni_dvd, (67.0 - 0.85, 42.8), via_dia_dvd, via_drill_dvd)
         _add_track(board, ni_dvd, pcbnew.F_Cu, [(67.0 - 0.85, 42.8), (67.0 + 0.85, 42.8)], w_default)
         _add_via(board, ni_dvd, (67.0 + 0.85, 42.8), via_dia_dvd, via_drill_dvd)
-        _add_track(board, ni_dvd, pcbnew.B_Cu, [(67.0 + 0.85, 42.8), (80.9, 42.8)], w_default)
-        _add_via(board, ni_dvd, (80.9, 42.8), via_dia_dvd, via_drill_dvd)
-        # Final vertical drop into R_J9VD_B.1 (80.9,46.79) crosses TWO
-        # pre-existing F_Cu ties at that same X -- DEV_DP's ESD_D->J9.3
-        # leg (y=45.0) and DEV_DM's ESD_D->J9.2 leg (y=45.65), only
-        # 0.65mm apart -- one combined B_Cu bridge spanning both
-        # (+-0.7mm margin each side, matching this net's other hops)
-        # clears them together rather than two independent hops.
-        _add_track(board, ni_dvd, pcbnew.F_Cu, [(80.9, 42.8), (80.9, 45.0 - 0.7)], w_default)
-        _add_via(board, ni_dvd, (80.9, 45.0 - 0.7), via_dia_dvd, via_drill_dvd)
-        _add_track(board, ni_dvd, pcbnew.B_Cu, [(80.9, 45.0 - 0.7), (80.9, 45.65 + 0.7)], w_default)
-        _add_via(board, ni_dvd, (80.9, 45.65 + 0.7), via_dia_dvd, via_drill_dvd)
-        _add_track(board, ni_dvd, pcbnew.F_Cu, [(80.9, 45.65 + 0.7), rj9vdb1], w_default)
+        # Tail (Type-C swap): R_J9VD_B moved to (82.0, 52.0) south of the
+        # connector, and the whole old x=80.9 pocket is gone. Stay on
+        # B_Cu: jog to y=43.0 at x=84.6 (the straight y=42.8 line passes
+        # only 0.59mm from the NPTH peg at (85.25,42.11) -- 15um over the
+        # hole-to-copper floor; the jog makes it 0.79mm), descend at
+        # x=86.2 (east of the D+ bridge vias and the 84.72-column shield
+        # PTH pads, west of the 88.9 column), then west at y=51.9 and a
+        # short F_Cu hook into R_J9VD_B.1 -- the y=51.49 leg rides the
+        # same-net T.2<->B.1 tie.
+        _add_track(board, ni_dvd, pcbnew.B_Cu,
+                   [(67.0 + 0.85, 42.8), (84.6, 42.8), (84.6, 43.0),
+                    (86.2, 43.0), (86.2, 51.9), (82.7, 51.9), (82.7, 51.75)], w_default)
+        # via tucked into the same-net shadow of B.1/T.2 (both
+        # DEV_VBUS_DET): 0.32mm off R_J9VD_B's GND pad corner, 0.39mm off
+        # R_J9VD_T.1 -- the earlier (82.6,51.9) spot was 0.14mm from the
+        # GND pad.
+        _add_via(board, ni_dvd, (82.7, 51.75), via_dia_dvd, via_drill_dvd)
+        _add_track(board, ni_dvd, pcbnew.F_Cu,
+                   [(82.7, 51.75), (82.7, rj9vdb1[1]), rj9vdb1], w_default)
 
     # --- North-bound (row1 -> north of row2) ----------------------------
     # GP10: PICO.14 (col 35.235) -> gap13/14 (33.965) -> hop ROW2 AND J2B
@@ -1759,18 +1753,8 @@ def _route_cluster_leftovers(board):
         _add_via(board, ni, (hop_x, hop_hi), via_dia, via_drill)
         _add_track(board, ni, pcbnew.F_Cu, [(hop_x, hop_hi), (hop_x, esdh5[1]), esdh5], w)
 
-    # J9_VBUS: R_J9VD_T.1 -> J9.1. Same east-jog-around-pad2 technique as
-    # _route_j9_vbus_esd_tap (a different offset, 1.6mm not 1.4mm, so this
-    # call's first segment doesn't collide with that function's own first
-    # segment on the idempotence check). Necked to Default width for the
-    # final approach -- J9's own pad2 (DEV_DM, y=45.65) sits close enough
-    # to pad1's y (46.3) that Power's 0.5mm round end-cap clips it.
-    ni = _net(board, "J9_VBUS")
-    r_t1 = _pos(_pad(board, "R_J9VD_T", "1"))
-    j9_1 = _pos(_pad(board, "J9", "1"))
-    east = (r_t1[0] + 1.6, r_t1[1])
-    _add_path_once(board, ni, pcbnew.F_Cu,
-                    [r_t1, east, (east[0], j9_1[1]), j9_1], w_default)
+    # J9_VBUS: R_J9VD_T.1 -> J9.1 moved to _route_j9_typec (the Type-C
+    # swap relocated the divider south of the connector).
 
     # P3V3: U_INA219_ALT.4 -> J_STEMMA.2, B_Cu (empty), Default width (not
     # Power -- see _route_power_cluster_bcu's rationale). Column 41.585:
@@ -1868,46 +1852,117 @@ def _route_cluster_leftovers(board):
                    [(hop_col, hop_hi), (hop_col, j6_p3v3[1]), j6_p3v3], w_default)
 
 
-def _route_dev_dp_esd_j9(board):
-    """ESD_D.6 (DEV_DP) -> J9.3: ESD_D's own pad5 (J9_VBUS, y=44.7) sits
-    directly below pad6 (y=43.75, same x=78.638) -- jog east first (clear
-    of pad5's column) before dropping to J9.3's y and heading into it."""
-    ni = _net(board, "DEV_DP")
-    w = _class_width(board, "DEV_DP")
-    p0 = _pos(_pad(board, "ESD_D", "6"))
-    p1 = _pos(_pad(board, "J9", "3"))
-    pts = [p0, (79.8, p0[1]), (79.8, p1[1]), p1]
-    _add_path_once(board, ni, pcbnew.F_Cu, pts, w)
+def _route_j9_typec(board):
+    """J9 as a Type-C device port (2026-07-30 swap): everything local to
+    the connector -- the D+/D- pad-pair bridges, the ESD_D feeds, the CC
+    Rd stubs, and the whole J9_VBUS web (J9.1 / D_J9_BUSPWR / R_J9VD_T /
+    ESD_D.5 tap).
 
+    Geometry (rot 90 at (87.85,45.0); board = (ax+ly, ay-lx)): the signal
+    row is a single column at x=83.805, pads 0.3mm wide on a 0.5mm pitch,
+    y 41.75(GND) 42.55(VBUS2,nc) 43.25(CC2) 43.75(SBU,nc) 44.25(D+/B6)
+    44.75(D-/A7) 45.25(D+/A6) 45.75(D-/B7) 46.25(CC1) 46.75(SBU,nc)
+    47.45(VBUS) 48.25(GND). NPTH pegs at (85.25, 42.11/47.89) kill any
+    south/east escape from the upper pads (hole-to-copper 0.25), so every
+    net leaves WEST.
 
-def _route_j9_vbus_esd_tap(board):
-    """R_J9VD_T.1 (J9_VBUS) -> ESD_D.5: R_J9VD_T's own pad1(J9_VBUS,y=47.81)
-    /pad2(DEV_VBUS_DET,y=46.79) share x=82.6 -- exit east first (away from
-    pad2). Then south (clear of R_J9VD's own courtyard and D_J9_BUSPWR's),
-    west along y=49.0 to x=77.6, then north toward ESD_D.5's own y --
-    crossing DEV_DM's y=45.65 "wall" along the way (R_DDM->ESD_D.3,
-    ESD_D.3<->ESD_D.4, ESD_D.4->J9.2 together span the *entire*
-    x=69.51-86.795, no gap), so that crossing hops briefly to B_Cu (empty
-    there) and back via two vias, mirroring _spike_to_trunk. x=77.6 (not
-    76.362, ESD_D.1/2/3's own column) clears ESD_D.2/GND's bbox (right
-    edge 77.025) by >=0.5mm."""
-    ni = _net(board, "J9_VBUS")
-    w = _class_width(board, "J9_VBUS")
-    ncls = board.GetDesignSettings().m_NetSettings.GetEffectiveNetClass("J9_VBUS")
+    The D+/D- pairs are interleaved (B6 < A7 < A6 < B7), so no same-layer
+    two-rail bridge exists: D- bridges on F_Cu (rail x=82.75 between its
+    own pads' rows), D+ bridges through B_Cu (west via at 82.2,44.25 --
+    its stub leaves y=44.25, below the D- rail -- and an east via at
+    85.0,45.25 threading the peg/pad gap).
+
+    Widths are Default (0.2mm) throughout, including J9_VBUS: the port is
+    detect-only by default (8.2k divider); the optional DNP bus-power
+    diode path stays under 0.5A worst-case, within 0.2mm/1oz ampacity."""
+    w_default = pcbnew.ToMM(
+        board.GetDesignSettings().m_NetSettings.GetDefaultNetclass().GetTrackWidth()
+    )
+    ncls = board.GetDesignSettings().m_NetSettings.GetDefaultNetclass()
     via_dia = pcbnew.ToMM(ncls.GetViaDiameter())
     via_drill = pcbnew.ToMM(ncls.GetViaDrill())
-    p0 = _pos(_pad(board, "R_J9VD_T", "1"))
-    p1 = _pos(_pad(board, "ESD_D", "5"))
-    hop_x = 77.6
-    east = (p0[0] + 1.4, p0[1])
-    hop_lo, hop_hi = 45.65 - 0.65, 45.65 + 0.65
-    if _track_exists(board, ni.GetNetCode(), pcbnew.F_Cu, _mm(*p0), _mm(*east)):
-        return
-    _add_track(board, ni, pcbnew.F_Cu, [p0, east, (east[0], 49.0), (hop_x, 49.0), (hop_x, hop_hi)], w)
-    _add_via(board, ni, (hop_x, hop_hi), via_dia, via_drill)
-    _add_track(board, ni, pcbnew.B_Cu, [(hop_x, hop_hi), (hop_x, hop_lo)], w)
-    _add_via(board, ni, (hop_x, hop_lo), via_dia, via_drill)
-    _add_track(board, ni, pcbnew.F_Cu, [(hop_x, hop_lo), (hop_x, p1[1]), p1], w)
+
+    j9 = board.FindFootprintByReference("J9")
+
+    def pads_of(num):
+        return sorted({_pos(p) for p in j9.Pads() if p.GetNumber() == num},
+                      key=lambda q: q[1])
+
+    dp_lo, dp_hi = pads_of("5")     # (83.805, 44.25) B6, (83.805, 45.25) A6
+    dm_lo, dm_hi = pads_of("6")     # (83.805, 44.75) A7, (83.805, 45.75) B7
+    cc1 = pads_of("2")[0]           # (83.805, 46.25)
+    cc2 = pads_of("3")[0]           # (83.805, 43.25)
+    vbus = pads_of("1")[0]          # (83.805, 47.45)
+    assert abs(vbus[0] - 83.805) < 0.01, f"J9 pad row moved: {vbus}"
+
+    # --- DEV_DM: ESD_D.4 feed + F_Cu bridge rail at x=82.75 -------------
+    ni = _net(board, "DEV_DM")
+    esd4 = _pos(_pad(board, "ESD_D", "4"))
+    _add_path_once(board, ni, pcbnew.F_Cu,
+                   [esd4, (82.9, esd4[1]), (82.9, dm_hi[1]), dm_hi], w_default)
+    _add_path_once(board, ni, pcbnew.F_Cu,
+                   [dm_lo, (82.75, dm_lo[1]), (82.75, dm_hi[1]), dm_hi], w_default)
+
+    # --- DEV_DP: ESD_D.6 feed into the B6 pad, then the B_Cu bridge -----
+    ni = _net(board, "DEV_DP")
+    esd6 = _pos(_pad(board, "ESD_D", "6"))
+    _add_path_once(board, ni, pcbnew.F_Cu,
+                   [esd6, (80.5, esd6[1]), (80.5, dp_lo[1]), dp_lo], w_default)
+    if not _track_exists(board, ni.GetNetCode(), pcbnew.F_Cu, _mm(*dp_lo), _mm(82.2, dp_lo[1])):
+        _add_track(board, ni, pcbnew.F_Cu, [dp_lo, (82.2, dp_lo[1])], w_default)
+        _add_via(board, ni, (82.2, 44.25), via_dia, via_drill)
+        _add_track(board, ni, pcbnew.B_Cu,
+                   [(82.2, 44.25), (84.4, 44.25), (85.0, 44.85), (85.0, 45.25)], w_default)
+        _add_via(board, ni, (85.0, 45.25), via_dia, via_drill)
+        _add_track(board, ni, pcbnew.F_Cu, [(85.0, 45.25), dp_hi], w_default)
+
+    # --- CC Rd stubs ----------------------------------------------------
+    # CC1 runs straight west at its own y (clear under the old divider
+    # spot, which moved south) and descends at x=78.5 into R_CC3.1.
+    ni = _net(board, "J9_CC1")
+    r1 = _pos(_pad(board, "R_CC3", "1"))
+    r2 = _pos(_pad(board, "R_CC3", "2"))
+    assert r1[1] < r2[1], "R_CC3 pad1 not on the north end (rot 270?)"
+    _add_path_once(board, ni, pcbnew.F_Cu,
+                   [cc1, (r1[0], cc1[1]), r1], w_default)
+    # CC2 exits west, hops to B_Cu (the DM "wall" y=45.65 spans the whole
+    # west pocket on F) and descends at x=80.35 into R_CC4.1.
+    ni = _net(board, "J9_CC2")
+    r1 = _pos(_pad(board, "R_CC4", "1"))
+    r2 = _pos(_pad(board, "R_CC4", "2"))
+    assert r1[1] < r2[1], "R_CC4 pad1 not on the north end (rot?)"
+    if not _track_exists(board, ni.GetNetCode(), pcbnew.F_Cu, _mm(*cc2), _mm(82.7, cc2[1])):
+        _add_track(board, ni, pcbnew.F_Cu,
+                   [cc2, (82.7, cc2[1]), (82.7, 43.45), (82.4, 43.45)], w_default)
+        _add_via(board, ni, (82.4, 43.45), via_dia, via_drill)
+        _add_track(board, ni, pcbnew.B_Cu,
+                   [(82.4, 43.45), (r1[0], 43.45), (r1[0], 50.85)], w_default)
+        _add_via(board, ni, (r1[0], 50.85), via_dia, via_drill)
+        _add_track(board, ni, pcbnew.F_Cu, [(r1[0], 50.85), r1], w_default)
+
+    # --- J9_VBUS web ----------------------------------------------------
+    # Spine: an F_Cu horizontal at y=53.4 south of everything, joined by
+    # (a) J9.1's descent at x=81.3, (b) D_J9_BUSPWR.2's drop at x=79.35,
+    # (c) the ESD_D.5 tap coming around on B_Cu (the DM wall again), and
+    # ending north into R_J9VD_T.1 (83.5, 52.51).
+    ni = _net(board, "J9_VBUS")
+    t1 = _pos(_pad(board, "R_J9VD_T", "1"))
+    t2 = _pos(_pad(board, "R_J9VD_T", "2"))
+    assert t1[1] > t2[1], "R_J9VD_T pad1 not on the south end (rot?)"
+    d2 = _pos(_pad(board, "D_J9_BUSPWR", "2"))
+    esd5 = _pos(_pad(board, "ESD_D", "5"))
+    if not _track_exists(board, ni.GetNetCode(), pcbnew.F_Cu, _mm(d2[0], 53.4), _mm(t1[0], 53.4)):
+        _add_track(board, ni, pcbnew.F_Cu, [(d2[0], 54.4), (t1[0], 54.4)], w_default)
+        _add_track(board, ni, pcbnew.F_Cu, [d2, (d2[0], 54.4)], w_default)
+        _add_track(board, ni, pcbnew.F_Cu, [(t1[0], 54.4), (t1[0], t1[1] + 0.1)], w_default)
+        _add_track(board, ni, pcbnew.F_Cu,
+                   [vbus, (81.3, vbus[1]), (81.3, 54.4)], w_default)
+        _add_track(board, ni, pcbnew.F_Cu, [esd5, (79.7, esd5[1])], w_default)
+        _add_via(board, ni, (79.7, esd5[1]), via_dia, via_drill)
+        _add_track(board, ni, pcbnew.B_Cu,
+                   [(79.7, esd5[1]), (79.7, 54.65), (82.9, 54.65)], w_default)
+        _add_via(board, ni, (82.9, 54.65), via_dia, via_drill)
+        _add_track(board, ni, pcbnew.F_Cu, [(82.9, 54.65), (82.9, 54.4)], w_default)
 
 
 def _route_vbus_sel_5v_ladder(board):
@@ -2642,8 +2697,7 @@ def main():
     _route_vbus_sel_5v_ladder(b)
     _route_power_cluster_bcu(b)
     _route_i2c0_stemma_bcu(b)
-    _route_dev_dp_esd_j9(b)
-    _route_j9_vbus_esd_tap(b)
+    _route_j9_typec(b)
     _route_cluster_leftovers(b)
     _route_pico_no_jog(b)
     _route_pico_row_jog(b)

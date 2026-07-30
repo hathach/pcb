@@ -241,7 +241,17 @@ _STITCH_VIAS_RING = [
 #   there would violate "stitch the perimeter, not the interior".
 _STITCH_VIAS_FRAGMENT_FIX = [
     (19.995, 19.434), (45.545, 41.878), (44.925, 16.787),
-    (63.3, 12.032), (10.332, 59.696), (51.617, 60.296), (79.751, 46.451),
+    (63.3, 12.032), (10.332, 59.696), (51.617, 60.296),
+    # (79.751, 46.451) -> (77.0, 53.0): the old spot is inside the J9
+    # Type-C rebuild's tap/CC lane bundle (shorted the J9_VBUS B_Cu
+    # vertical at x=79.7); the reshaped west-pocket island reaches the
+    # south pocket, stitched there instead.
+    (77.0, 53.0),
+    # J9 Type-C south row: R_CC4.2's and R_J9VD_B.2's GND pockets are
+    # boxed in by the CC/J9_VBUS/DEV_VBUS_DET lane bundle -- the F pour
+    # slivers holding those pads reach no other GND copper (union-find
+    # caught both). One via in each sliver grounds them through B_Cu.
+    (80.33, 53.5), (82.4, 53.2),
     (73.401, 44.7), (23.805, 19.434), (18.935, 23.408), (26.345, 51.901),
     # Task 18: genuine orphan island inside the former "Antenna Copper
     # Keep Out" region (x 43.3-52.3, y 24.9-39.1, neutered in Task 14h) --

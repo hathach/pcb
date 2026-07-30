@@ -266,3 +266,12 @@ the as-built source of truth for behavior, and `docs/BOM.csv`/
   full margin. Board regenerated from scratch by the `hw/` pipeline
   (proven byte-equivalent first); DRC/ERC/netlist-parity/pour gates all
   green.
+- **§4 `J9` (2026-07-30, same order session)**: the PIO-USB device
+  micro-B was also replaced by a **USB Type-C receptacle** (same HRO
+  land, LCSC C165948) with **`R_CC3`/`R_CC4`** Rd pull-downs (a Type-C
+  host does not detect a device without them). The USB2 D+/D- pad pairs
+  (A6/B6, A7/B7) are bridged on-board (interleaved pads force a
+  two-layer weave); SBU and the second VBUS column are NC. The
+  VBUS-detect divider (`R_J9VD_T/B`) moved from beside the old micro-B
+  to the open band SOUTH of the connector. Same gates re-run, all
+  green.

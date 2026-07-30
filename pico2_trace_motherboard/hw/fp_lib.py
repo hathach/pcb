@@ -52,6 +52,12 @@ FP = {
     # 6=shield (4x PTH legs) -- same multi-pad-per-number convention as
     # usb_microb's own shield pad "6".
     "usb_c_pwr": ("pico2_trace", "USB_C_PWR_HRO_TYPE-C-31-M-12"),
+    # usb_c_dev (J9 micro-B -> Type-C swap, 2026-07-30, second pass): same
+    # HRO land, renumbered for a USB2 DEVICE port: 1=VBUS (A4/B9), 2=CC1,
+    # 3=CC2, 4=GND, 5=D+ (A6/B6 -- two separate pads, bridged by board
+    # copper), 6=D- (A7/B7, ditto), 7=SBU (NC), 8=VBUS second column
+    # (A9/B4, board-NC like usb_c_pwr's "7"), 9=shield (4x PTH).
+    "usb_c_dev": ("pico2_trace", "USB_C_DEV_HRO_TYPE-C-31-M-12"),
     "hdr_1x03": ("Connector_PinHeader_2.54mm", "PinHeader_1x03_P2.54mm_Vertical"),
     "hdr_1x02": ("Connector_PinHeader_2.54mm", "PinHeader_1x02_P2.54mm_Vertical"),
     "hdr_1x06": ("Connector_PinHeader_2.54mm", "PinHeader_1x06_P2.54mm_Vertical"),
