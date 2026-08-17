@@ -120,6 +120,54 @@ def test_breakout():
             f"breakout J2B pad {n - 20} not tied to PICO pin {n}"
 
 
+def test_edge_connector_mouths():
+    """REV B guard (board-level): every edge-facing receptacle's mouth must
+    sit AT its board edge, never inboard.
+
+    REV A shipped with J5's USB-A opening recessed 6.61mm -- its anchor was
+    derived from the pad rows alone and the mouth-to-edge dimension was
+    never asserted, while J8/J9 got explicit flush-lip arithmetic. A cable
+    overmold fouls on the ledge left in front of the opening, and no
+    existing gate catches it: DRC has no such rule, and the pre-order
+    checklist's "openings must face off the board edge" was a human eyeball
+    on the fab's render. This turns it into an assertion."""
+    import pytest
+    pcbnew = pytest.importorskip("pcbnew")
+    board_file = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "pico2_trace.kicad_pcb")
+    if not os.path.exists(board_file):
+        pytest.skip("board not generated yet")
+    b = pcbnew.LoadBoard(board_file)
+    assert b is not None, f"LoadBoard({board_file!r}) returned None"
+
+    MAX_RECESS_MM = 1.0
+    # ref -> (axis, which F.Fab extreme is the mouth, edge coordinate mm)
+    EDGE_FACING = {
+        "J5": ("x", "max", 92.0),   # USB-A host      -> east edge
+        "J8": ("y", "min", 0.0),    # USB-C power in  -> north edge
+        "J9": ("x", "max", 92.0),   # USB-C device    -> east edge
+    }
+    for ref, (axis, side, edge) in EDGE_FACING.items():
+        fp = b.FindFootprintByReference(ref)
+        assert fp is not None, f"{ref} missing from board"
+        vals = []
+        for it in fp.GraphicalItems():
+            if b.GetLayerName(it.GetLayer()) != "F.Fab":
+                continue
+            bb = it.GetBoundingBox()
+            vals += ([pcbnew.ToMM(bb.GetLeft()), pcbnew.ToMM(bb.GetRight())]
+                     if axis == "x" else
+                     [pcbnew.ToMM(bb.GetTop()), pcbnew.ToMM(bb.GetBottom())])
+        assert vals, f"{ref}: no F.Fab outline to measure the mouth against"
+        mouth = max(vals) if side == "max" else min(vals)
+        recess = abs(edge - mouth)
+        assert recess <= MAX_RECESS_MM, (
+            f"{ref} mouth sits {recess:.2f}mm inboard of the {axis}={edge} "
+            f"edge (limit {MAX_RECESS_MM}mm) -- a plug overmold will foul "
+            f"on the ledge in front of it")
+
+
 # --------------------------------------------------------------------------
 # Task 9: --compare-netlists -- authoritative schematic <-> reference-netlist
 # cross-check. A tiny S-expression reader (not a regex scrape) so it doesn't

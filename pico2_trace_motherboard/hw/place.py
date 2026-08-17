@@ -238,7 +238,19 @@ POS: dict[str, tuple[float, float, float]] = {
     "R_HDM_PD": (63.79, 22.85, 270),
     "ESD_H": (66.7, 20.0, 0),
     "TP3": (67.45, 25.4, 0),
-    "J5": (78.615, 20.0, 90),
+    # J5 (REV B fix): moved EAST 6.610mm so the receptacle mouth is flush
+    # with the x=92 board edge. REV A placed this anchor from the pad rows
+    # alone and never checked the mouth-to-edge dimension -- the fabricated
+    # boards have the opening recessed 6.61mm inboard (F.Fab east edge
+    # 85.39 vs edge 92.00), so a cable overmold fouls on the ledge in front
+    # of it. J8/J9 got explicit flush-lip arithmetic; J5 predates that
+    # convention. New anchor = 92.00 - 6.775 (its own anchor->F.Fab-east
+    # offset) = 85.225. Only its own DP/DM/VBUS legs lengthen (~6.6mm,
+    # harmless at PIO-USB full speed); nothing else moves -- the y-band
+    # 12.7..27.3 east of x=78 holds only GND pour and stitching vias
+    # (MH2 is at y=4, J9 at y=40..50). Guarded by
+    # hw/checks.py::test_edge_connector_mouths.
+    "J5": (85.225, 20.0, 90),
 
     # --- Power cluster (shunt/current-sense/load-switch), x 60..79.
     "R_SHUNT": (64.6, 31.5, 0),
@@ -372,7 +384,7 @@ TRACE_SILK_THICKNESS_MM = 0.15
 BOARD_NAME_TEXT = "PICO2 TRACE MB"
 BOARD_NAME_POS = (64.0, 2.0)
 BOARD_NAME_SIZE_MM = 1.2
-BOARD_REV_TEXT = "REV A"
+BOARD_REV_TEXT = "REV B"
 BOARD_REV_POS = (64.0, 4.3)
 BOARD_REV_SIZE_MM = 1.0
 BOARD_ID_THICKNESS_MM = 0.15
