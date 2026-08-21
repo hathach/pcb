@@ -203,7 +203,9 @@ from, not a redundant sixth entry point.
 ## Trace bring-up ladder
 
 **This section supersedes stale guidance in `DESIGN.md`.** The J-Trace PRO
-**V2 is rated to 150 MHz TRACECLK** — the ~40 MHz cliff recorded in the
+V2 is **in-spec to 100 MHz TRACECLK, ~120 MHz achievable with sampling-delay
+tuning** (SEGGER's own published V2 best; the 150 MHz on current product
+pages is V3/V4 hardware). The ~40 MHz cliff recorded in the
 original fly-wire handoff (`PICO2_TRACE_PCB_HANDOFF.md`) was a *fly-wire
 signal-integrity limit, not a probe limit*. This PCB (source-terminated,
 short, GND-guarded — see DESIGN.md §5.4) should be pushed well past that
@@ -224,6 +226,42 @@ Run the ladder at **48 → 80 → 120 → 150 MHz core** (TRACECLK = core/2, so
    a blanket "clock too high."
 4. Accept a rung at 3/3 full-total captures; record the final achieved
    rate here and in the `etm-trace` skill's board table.
+
+### Result (2026-08-21, first bring-up)
+
+**PASS at 180 MHz core / 90 MHz TRACECLK, width 4** — beyond the ladder's
+top rung, on the same J-Trace PRO V2. The one required setting is **data
+sampling +5 ns** (`Project.SetTraceTiming (5000, 5000, 5000, 5000)`,
+committed in the TinyUSB ozone reference): under the cdc_msc enumeration
+burst the eye passes at +4000..+5000 ps (3/3 each) and is dead at
+<= +3000 ps; TD=0 (the fly-wire's working value at 24 MHz TRACECLK) does
+not decode at 90 MHz. Zero overflow across all passing runs, 15M
+fetches/10 s full-quality profiles. Intermediate rungs (80/120/150) were
+skipped — 48 smoke-passed, then straight to the 180 MHz goal.
+
+Known flake: an occasional *instant* unknown-packet death (offset
+~0x10-0x6C) right as the stream arms, while the bootrom still runs on its
+boot clock — retry the capture; it is not a board or timing fault. The
+"Known SI limitation" below (J1B return-path gaps) never surfaced: no
+mid-stream decode failures in any accepted run.
+
+### TRACECLK ceiling (2026-08-21, same session)
+
+The headroom ladder was run the same day: **120 MHz TRACECLK (240 MHz
+core, vreg 1.15 V) is the maximum** — cdc_msc 3/3 at TD +3500 with 12 mA
+fast-slew pads asserted pre-PLL-switch. **>= 125 MHz TRACECLK is a hard
+probe wall**: 125/130/140/150 MHz TRACECLK all failed at every sample
+delay (full-UI 500 ps sweep at 125), at trace width 1, and with fast
+pads — a razor edge between 120 (≈2 ns open eye) and 125 MHz (closed)
+consistent with the V2's real capability, not with this board's SI (which
+the wall's sharpness exonerates: board-limited eyes close gradually).
+Post-hoc spec check: SEGGER's in-spec max trace clock is 100 MHz, and
+their only published faster V2 number is "up to 120 MHz ... with a slight
+adjustment of sampling delays in J-Trace PRO V2" (J-Trace Isolator page)
+— this rig reproduced that number exactly; the "150 MHz" this document's
+earlier revision attributed to the V2 is the V3/V4 product-page figure.
+A V3+ probe is the lever if >120 MHz TRACECLK is ever truly needed. The
+board itself is clean at every rate the probe can sample.
 
 ## Known SI limitation (document honestly)
 
