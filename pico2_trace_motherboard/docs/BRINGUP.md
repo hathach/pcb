@@ -263,6 +263,25 @@ earlier revision attributed to the V2 is the V3/V4 product-page figure.
 A V3+ probe is the lever if >120 MHz TRACECLK is ever truly needed. The
 board itself is clean at every rate the probe can sample.
 
+### Fly-wire-era workaround re-validation (2026-08-21, same day)
+
+Treating every fly-wire-era result as untrusted, each firmware workaround
+was A/B-tested on this board (cdc_msc enumeration burst, 3/3 acceptance):
+
+- **TIMER DBGPAUSE clear — removed.** Captures profile healthy running
+  firmware without it; the fly-wire-era "sleep_ms spins forever" wedge
+  does not reproduce on good hardware.
+- **12 mA fast-slew trace pads — removed.** Default pads pass 3/3 at the
+  same +1 ns sampling with a *wider* idle eye (−1000..+2000 ps).
+- **"Runtime clock switch kills trace" — confirmed, refined.** A
+  board_init-time 120→156 MHz step silently truncates the capture at the
+  switch (decode ends inside `check_sys_clock_khz`, no decoder error,
+  3/3) — hence the clock stays pinned from crt0.
+
+Final firmware trace footprint on RP2350: one conditional (TX-only UART
+console, GPIO1 = TRACECLK). Everything else is J-Link's built-in device
+script plus the committed Ozone reference (156 MHz, +1 ns sampling).
+
 ## Known SI limitation (document honestly)
 
 The bottom GND pour has **~0.9–1.2 mm gaps directly beneath all five trace
